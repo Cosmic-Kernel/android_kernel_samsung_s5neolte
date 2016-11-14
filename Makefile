@@ -379,23 +379,13 @@ KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -w \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
-		   -Wno-format-security \
-		   -fno-delete-null-pointer-checks \
-		   -fdiagnostics-show-option \
-		   -std=gnu89
-
-# enable cpu specific flags
-KBUILD_CFLAGS	+= -pipe -mcpu=cortex-a53 -mtune=cortex-a53 -DERRATA_A53_835769 \
-			-DERRATA_A53_836870 -DERRATA_A53_843419 -DA53_DISABLE_NON_TEMPORAL_HINT
-
-#ERRATA_A53_835769 := 1
-#ERRATA_A53_836870 := 1 
-#ERRATA_A53_843419 := 1
-#A53_DISABLE_NON_TEMPORAL_HINT := 1
+		   -Wno-format-security -Wno-logical-not-parentheses \
+		   -mtune=cortex-a53 \
+		   -std=gnu89 $(call cc-option,-fno-PIE)
 
 KBUILD_AFLAGS_KERNEL :=
 KBUILD_CFLAGS_KERNEL :=
-KBUILD_AFLAGS   := -D__ASSEMBLY__
+KBUILD_AFLAGS   := -D__ASSEMBLY__ $(call cc-option,-fno-PIE)
 KBUILD_AFLAGS_MODULE  := -DMODULE
 KBUILD_CFLAGS_MODULE  := -DMODULE
 KBUILD_LDFLAGS_MODULE := -T $(srctree)/scripts/module-common.lds
