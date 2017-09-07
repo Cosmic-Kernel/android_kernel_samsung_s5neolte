@@ -127,7 +127,12 @@ error:
 /*
  * Install a thread keyring to the given credentials struct if it didn't have
  * one already.  This is allowed to overrun the quota.
+<<<<<<< HEAD
  * Return: 0 if a thread keyring is now present; -errno on failure. 
+=======
+ *
+ * Return: 0 if a thread keyring is now present; -errno on failure.
+>>>>>>> 3ebc21042... private mode fix, update to 3.10.107, afterburner v2.0.0
  */
 int install_thread_keyring_to_cred(struct cred *new)
 {

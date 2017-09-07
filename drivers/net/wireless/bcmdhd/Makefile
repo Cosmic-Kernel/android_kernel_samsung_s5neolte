@@ -172,7 +172,6 @@ ifeq ($(shell expr $(ANDROID_PLATFORM_VERSION) \< 7),1)
 DHDCFLAGS += -DDHD_LEGACY_FILE_PATH
 $(warning WiFi will be using Legacy file path)
 endif
-endif
 
 ##############################
 # Android Platform Definition
