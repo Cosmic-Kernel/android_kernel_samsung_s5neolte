@@ -11,6 +11,11 @@
  */
 #include <linux/battery/sec_battery.h>
 
+#include <linux/moduleparam.h>
+
+static int wl_polling = 10;
+module_param(wl_polling, int, 0644);
+
 const char *charger_chip_name;
 bool slate_mode_state;
 
@@ -770,7 +775,7 @@ static bool sec_bat_ovp_uvlo_result(
 			battery->is_recharging = false;
 			/* Take the wakelock during 10 seconds
 			   when over-voltage status is detected	 */
-			wake_lock_timeout(&battery->vbus_wake_lock, HZ * 10);
+			wake_lock_timeout(&battery->vbus_wake_lock, HZ * wl_polling);
 			break;
 		case POWER_SUPPLY_HEALTH_WATCHDOG_TIMER_EXPIRE:
 			dev_info(battery->dev,
@@ -2384,7 +2389,7 @@ static void sec_bat_do_fullcharged(
 	 * activated wake lock in a few seconds
 	 */
 	if (battery->pdata->polling_type == SEC_BATTERY_MONITOR_ALARM)
-		wake_lock_timeout(&battery->vbus_wake_lock, HZ * 10);
+		wake_lock_timeout(&battery->vbus_wake_lock, HZ * wl_polling);
 }
 
 static bool sec_bat_fullcharged_check(
@@ -3248,7 +3253,7 @@ static void sec_bat_cable_work(struct work_struct *work)
 	 * if cable is connected and disconnected,
 	 * activated wake lock in a few seconds
 	 */
-	wake_lock_timeout(&battery->vbus_wake_lock, HZ * 10);
+	wake_lock_timeout(&battery->vbus_wake_lock, HZ * wl_polling);
 
 	if (battery->cable_type == POWER_SUPPLY_TYPE_BATTERY ||
 		((battery->pdata->cable_check_type &
@@ -6561,7 +6566,7 @@ static int __devinit sec_battery_probe(struct platform_device *pdev)
 		POWER_SUPPLY_PROP_CAPACITY, value);
 	if (value.intval <= 5) {
 		battery->ignore_store_mode = true;
-	} else {	
+	} else {
 		value.intval = battery->store_mode;
 		psy_do_property(battery->pdata->charger_name, set,
 				POWER_SUPPLY_PROP_CONSTANT_CHARGE_CURRENT_MAX, value);
