@@ -73,12 +73,12 @@
 		battery0,rce_value = <0x0749 0x0580 0x371>;
 		battery0,dtcd_value = <0x1>;
 		battery0,rs_value = <0x1ae 0x47a 0x3800 0x00a4>; /*rs mix_factor max min*/
-		battery0,vit_period = <0x350a>;
+		battery0,vit_period = <0x3506>;
 		battery0,mix_value = <0x0503 0x0004>; /*mix_rate init_blank*/
 		battery0,topoff_soc = <0x0 0x05>; /*enable soc*/
-		battery0,volt_cal = <0x8000>;
-		battery0,curr_cal = <0x6900>;
-		battery0,charge_offset_cal = <0x4>;
+		battery0,volt_cal = <0x809E>;
+		battery0,curr_cal = <0x6D85>;
+		battery0,charge_offset_cal = <0x00>;
 	};
 
 	battery {
@@ -117,7 +117,7 @@
 		battery,input_current_limit = <1500 0 0 1500 460 900 1000 460 1000 0 760 1450 1500 0 0 400 700 1300 300 1000 1500 0 1450 1000 1500 80 1500 1500 1400 450>;
 		battery,fast_charging_current = <2000 0 0 2000 460 1200 1000 460 1200 0 900 1600 2000 0 0 400 700 1300 300 1000 1900 0 2000 1000 2000 80 1800 1000 1400 450>;
 		battery,full_check_current_1st = <200 0 0 200 200 200 200 200 200 0 200 200 200 0 0 200 200 200 200 200 200 0 200 200 200 0 200 200 200 200>;
-		battery,full_check_current_2nd = <2400 0 0 2400 2400 2400 2400 2400 2400 0 2400 2400 2400 0 0 2400 2400 2400 2400 2400 2400 0 2400 2400 2400 2400 2400 2400 2400 2400>;
+		battery,full_check_current_2nd = <100 0 0 100 100 100 100 100 100 0 100 100 100 0 0 100 100 100 100 100 100 0 100 100 100 100 100 100 100 100>;
 
 		battery,inbat_voltage = <0>;
 		battery,inbat_voltage_table_adc = <3120 3101 3061 3038 3001 2956 2920 2887 2856 2814
@@ -163,9 +163,9 @@
 		battery,temp_high_recovery_lpm = <530>;
 		battery,temp_low_threshold_lpm = <(-50)>;
 		battery,temp_low_recovery_lpm = <0>;
-		battery,full_check_type = <7>; /* SEC_BATTERY_FULLCHARGED_CHGPSY */
-		battery,full_check_type_2nd = <3>; /* SEC_BATTERY_FULLCHARGED_TIME */
-		battery,full_check_count = <1>;
+		battery,full_check_type = <2>; /* SEC_BATTERY_FULLCHARGED_FG_CURRENT  */
+		battery,full_check_type_2nd = <2>; /* SEC_BATTERY_FULLCHARGED_FG_CURRENT  */
+		battery,full_check_count = <2>;
 		battery,chg_gpio_full_check = <0>;
 		battery,chg_polarity_full_check = <1>;
 
@@ -192,7 +192,7 @@
 		#io-channel-cells = <1>;
 		io-channel-ranges;
 
-		battery,chg_float_voltage = <4400>;
+		battery,chg_float_voltage = <4390>;
 
 		battery,self_discharging_en;
 		battery,force_discharging_limit = <650>;
@@ -292,8 +292,8 @@
 		battery,chg_polarity_en = <0>;
 		battery,chg_gpio_status = <0>;
 		battery,chg_polarity_status = <0>;
-		battery,chg_float_voltage = <4400>;
-		chg_autostop = <0>;
+		battery,chg_float_voltage = <4390>;
+		chg_autostop = <1>;
 		chg_autoset = <1>;
 		chg_aiclen = <0>;
 		chg_aiclth = <4500>;

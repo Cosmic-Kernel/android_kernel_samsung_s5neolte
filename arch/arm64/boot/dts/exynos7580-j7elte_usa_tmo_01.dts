@@ -520,9 +520,9 @@
 			interrupt-parent = <&gpa3>;
 			interrupts = <3 0 0>;
 			sx9306-i2c,nirq-gpio = <&gpa3 3 0>;
-			sx9306_wifi-i2c,normal-thd = <15>; /* normal touch threshold */
-			sx9306_wifi-i2c,ch-main = <0>; /* channel number */
-			sx9306_wifi-i2c,ch-sub1 = <0xff>;  /*oxff: Not be used sub channel */
+			sx9306-i2c,normal-thd = <15>; /* normal touch threshold */
+			sx9306-i2c,ch-main = <0>; /* channel number */
+			sx9306-i2c,ch-sub1 = <0xff>;  /*oxff: Not be used sub channel */
 		};
 	};
 
@@ -1354,13 +1354,14 @@
 
 	decon_board_list: decon_board_list {
 		dsim_set_panel_power_enable {
-			type = "regulator,enable", "delay,usleep", "regulator,enable";
+			type = "regulator,enable", "regulator,enable", "delay,usleep";
 			delay = <10000 11000>;
 			regulator = "LCD_1P8", "LCD_3P0";
 		};
 		dsim_set_panel_power_disable {
-			type ="regulator,disable", "delay,usleep", "regulator,disable";
-			delay = <10000 11000>;
+			type = "delay,usleep", "gpio,low", "delay,usleep", "regulator,disable", "regulator,disable";
+			gpios = <&gpd1 3 0x1>;
+			delay = <5000 6000>, <10000 11000>;
 			regulator = "LCD_3P0", "LCD_1P8";
 		};
 		dsim_reset_panel {

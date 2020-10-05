@@ -697,6 +697,7 @@ u32 BUTTON_MAPPING_KEY[MAX_SUPPORTED_BUTTON_NUM] = {
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 struct bt532_ts_info *tui_tsp_info;
+extern int tui_force_close(uint32_t arg);
 #endif
 
 /* define i2c sub functions*/
@@ -2056,8 +2057,8 @@ static void clear_report_data(struct bt532_ts_info *info)
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 void trustedui_mode_on(void){
-	//tsp_debug_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
-	//clear_report_data(tui_tsp_info);
+	tsp_debug_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
+	clear_report_data(tui_tsp_info);
 	tsp_debug_info(true, &tui_tsp_info->client->dev, "%s : esd timer disable", __func__);
 #if ESD_TIMER_INTERVAL
 	esd_timer_stop(tui_tsp_info);
@@ -2377,10 +2378,24 @@ static int  bt532_ts_open(struct input_dev *dev)
 
 	tsp_debug_info(true, &misc_info->client->dev, "%s, %d \n", __func__, __LINE__);
 
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+		dev_err(&info->client->dev, "%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+			dev_err(&info->client->dev, "%s TUI flag force clear!\n",	__func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
+
 	if (info == NULL)
 		return 0;
 
-	if((pdata->support_spay)&&(info->spay_enable)){
+	if((pdata->support_spay)&&(info->spay_enable)&&(info->sleep_mode)){
 		tsp_debug_info(true, &misc_info->client->dev, "%s, wake up\n", __func__);
 		write_cmd(info->client, BT532_WAKEUP_CMD);
 		info->sleep_mode = 0;
@@ -2430,6 +2445,20 @@ static void bt532_ts_close(struct input_dev *dev)
 	struct bt532_ts_platform_data *pdata = info->pdata;
 
 	tsp_debug_info(true, &misc_info->client->dev, "%s, %d \n", __func__, __LINE__);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+		dev_err(&info->client->dev, "%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+			dev_err(&info->client->dev, "%s TUI flag force clear!\n",	__func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
 
 	if (info == NULL)
 		return;
@@ -4279,6 +4308,17 @@ static void clear_cover_mode(void *device_data)
 		if (finfo->cmd_param[0] > 1) {
 			info->flip_enable = true;
 			info->cover_type = finfo->cmd_param[1];
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+			if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+				msleep(100);
+				tui_force_close(1);
+				msleep(200);
+				if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+					trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+					trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+				}
+			}
+#endif // CONFIG_TRUSTONIC_TRUSTED_UI		
 		} else {
 			info->flip_enable = false;
 		}

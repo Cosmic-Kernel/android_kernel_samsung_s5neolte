@@ -111,6 +111,7 @@
 			bhy,gpio_irq = <&gpa3 0 0x00>;
 			bhy,ldo_enable = <&gpd2 7 0x01>;
 			reg = <0x28>;
+			bhy,acc-axis = <4>;
 		};
 
 		yas537@2e {

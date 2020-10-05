@@ -463,7 +463,9 @@ static int exynos_secure_mode_enable(struct kbase_device *kbdev)
 	/* enable secure mode : TZPC */
 	int ret = 0;
 
-	if (!kbdev && !kbdev->secure_mode_support) {
+	if (!kbdev)
+		goto secure_out;
+	if (!kbdev->secure_mode_support) {
 		GPU_LOG(DVFS_ERROR, LSI_GPU_SECURE, 0u, 0u, "%s: wrong operation! DDK cannot support Secure Rendering\n", __func__);
 		ret = -EINVAL;
 		goto secure_out;
@@ -489,8 +491,8 @@ static int exynos_secure_mode_enable(struct kbase_device *kbdev)
 	if (ret == SMC_TZPC_OK)
 		ret = 0;
 
-secure_out:
 #endif // defined(CONFIG_EXYNOS_CONTENT_PATH_PROTECTION)
+secure_out:
 	return ret;
 }
 
@@ -499,7 +501,9 @@ static int exynos_secure_mode_disable(struct kbase_device *kbdev)
 	/* Turn off secure mode and reset GPU : TZPC */
 	int ret = 0;
 
-	if (!kbdev && !kbdev->secure_mode_support) {
+	if (!kbdev)
+		goto secure_out;
+	if (!kbdev->secure_mode_support) {
 		GPU_LOG(DVFS_ERROR, LSI_GPU_SECURE, 0u, 0u, "%s: wrong operation! DDK cannot support Secure Rendering\n", __func__);
 		ret = -EINVAL;
 		goto secure_out;
@@ -525,8 +529,8 @@ static int exynos_secure_mode_disable(struct kbase_device *kbdev)
 	if (ret == SMC_TZPC_OK)
 		ret = 0;
 
-secure_out:
 #endif // defined(CONFIG_EXYNOS_CONTENT_PATH_PROTECTION)
+secure_out:
 	return ret;
 }
 
@@ -562,7 +566,9 @@ static int exynos_secure_mem_enable(struct kbase_device *kbdev, int ion_fd, u64 
 	/* enable secure world mode : TZASC */
 	int ret = 0;
 
-	if (!kbdev && !kbdev->secure_mode_support) {
+	if (!kbdev)
+		goto secure_out;
+	if (!kbdev->secure_mode_support) {
 		GPU_LOG(DVFS_ERROR, LSI_GPU_SECURE, 0u, 0u, "%s: wrong operation! DDK cannot support Secure Rendering\n", __func__);
 		ret = -EINVAL;
 		goto secure_out;
@@ -606,8 +612,8 @@ static int exynos_secure_mem_enable(struct kbase_device *kbdev, int ion_fd, u64 
 			if (ion_phys(client, ion_handle, &phys, &len)) {
 				GPU_LOG(DVFS_ERROR, LSI_GPU_SECURE, 0u, 0u, "%s: Failed to get phys. addr of G3D\n",
 						__func__);
-				ion_client_destroy(client);
 				ion_free(client, ion_handle);
+				ion_client_destroy(client);
 				goto secure_out;
 			}
 
@@ -648,7 +654,9 @@ static int exynos_secure_mem_disable(struct kbase_device *kbdev, struct kbase_va
 	/* Turn off secure world mode : TZASC */
 	int ret = 0;
 
-	if (!kbdev && !kbdev->secure_mode_support) {
+	if (!kbdev)
+		goto secure_out;
+	if (!kbdev->secure_mode_support) {
 		GPU_LOG(DVFS_ERROR, LSI_GPU_SECURE, 0u, 0u, "%s: wrong operation! DDK cannot support Secure Rendering\n", __func__);
 		ret = -EINVAL;
 		goto secure_out;

@@ -63,7 +63,6 @@ void kbase_pm_register_access_disable(struct kbase_device *kbdev)
 
 int kbase_hwaccess_pm_init(struct kbase_device *kbdev)
 {
-	int ret = 0;
 	struct kbase_pm_callback_conf *callbacks;
 
 	KBASE_DEBUG_ASSERT(kbdev != NULL);
@@ -118,9 +117,7 @@ int kbase_hwaccess_pm_init(struct kbase_device *kbdev)
 	}
 
 	/* Initialise the metrics subsystem */
-	ret = kbasep_pm_metrics_init(kbdev);
-	if (ret)
-		return ret;
+	kbasep_pm_metrics_init(kbdev);
 
 	init_waitqueue_head(&kbdev->pm.backend.l2_powered_wait);
 	kbdev->pm.backend.l2_powered = 0;

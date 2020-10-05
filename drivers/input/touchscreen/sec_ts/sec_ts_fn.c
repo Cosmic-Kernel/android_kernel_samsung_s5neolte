@@ -25,6 +25,9 @@
 #include <linux/sec_sysfs.h>
 
 #include "sec_ts.h"
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+#include <linux/trustedui.h>
+#endif
 
 #define FACTORY_MODE
 #define tostring(x) (#x)
@@ -124,6 +127,9 @@ static void set_log_level(void *device_data);
 
 static int get_tsp_nvm_data(struct sec_ts_data *ts);
 static void not_support_cmd(void *device_data);
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+extern int tui_force_close(uint32_t arg);
+#endif
 
 struct ft_cmd ft_cmds[] = {
 	{FT_CMD("fw_update", fw_update),},
@@ -290,6 +296,11 @@ static ssize_t cmd_store(struct device *dev, struct device_attribute *attr,
 
 	if (!ts) {
 		printk(KERN_ERR "%s: No platform data found\n", __func__);
+		return -EINVAL;
+	}
+
+	if (strlen(buf) >= CMD_STR_LEN) {		
+		tsp_debug_err(true, &ts->client->dev, "%s: cmd length is over (%s,%d)!!\n", __func__, buf, (int)strlen(buf));
 		return -EINVAL;
 	}
 
@@ -1712,6 +1723,17 @@ static void clear_cover_mode(void *device_data)
 		if (ts->cmd_param[0] > 1) {
 			ts->flip_enable = true;
 			ts->cover_type = ts->cmd_param[1];
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+			if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+				sec_ts_delay(100);
+				tui_force_close(1);
+				sec_ts_delay(200);
+				if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){
+					trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+					trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+				}
+			}
+#endif // CONFIG_TRUSTONIC_TRUSTED_UI			
 		} else {
 			ts->flip_enable = false;
 		}

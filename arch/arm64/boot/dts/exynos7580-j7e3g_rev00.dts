@@ -1279,6 +1279,7 @@
 					&audio_codec_cod3022x>;
 		samsung,auxdev = <&s2801x>;
 		samsung,use-externel-jd;
+		samsung,codec-uses-i2scdclk;
 		clocks = <&clock 151>;		 /* sclk_i2s */
 		clock-names = "codec_bclk";
 		mic-bias-mode = <1 2 0>;
@@ -1299,7 +1300,7 @@
 		acc_int: acc_int {
 			samsung,pins = "gpa1-0";
 			samsung,pins-function = <0x0>;
-			samsung,pin-pud = <0>;
+			samsung,pin-pud = <1>;
 			samsung,pin-drv = <0>;
 		};
 		prox_int: prox_int {
@@ -1541,6 +1542,44 @@
 			/* Time table */
 			input_booster,head_times = <130 0>;
 			input_booster,tail_times = <0 0>;
+			input_booster,phase_times = <0 0>;
+		};
+		booster_key@8 {
+			input_booster,label = "PEN & HOVER";
+			input_booster,type = <7>;	/* BOOSTER_DEVICE_PEN & HOVER */
+
+			input_booster,levels = <1 2>;
+
+			/* Frequency table */
+			/* for level	:	1_Head 2_Tail*/
+			input_booster,cpu_freqs = <1100000 900000>;
+			input_booster,hmp_boost = <0 0>;
+			input_booster,kfc_freqs = <1100000 900000>;
+			input_booster,mif_freqs = <0 0>;
+			input_booster,int_freqs = <0 0>;
+
+			/* Time table */
+			input_booster,head_times = <130 130>;
+			input_booster,tail_times = <500 500>;
+			input_booster,phase_times = <0 0>;
+		};
+		booster_key@9 {
+			input_booster,label = "GAMEPAD";
+			input_booster,type = <8>;	/* BOOSTER_DEVICE_GAMEPAD */
+
+			input_booster,levels = <1 2>;
+
+			/* Frequency table */
+			/* for level	:	1_Head 2_Tail*/
+			input_booster,cpu_freqs = <1300000 900000>;
+			input_booster,hmp_boost = <0 0>;
+			input_booster,kfc_freqs = <1300000 900000>;
+			input_booster,mif_freqs = <0 0>;
+			input_booster,int_freqs = <0 0>;
+
+			/* Time table */
+			input_booster,head_times = <130 130>;
+			input_booster,tail_times = <500 500>;
 			input_booster,phase_times = <0 0>;
 		}; // Input Booster -
 		/* If you need to add new key type, add it this position */

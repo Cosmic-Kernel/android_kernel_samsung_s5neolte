@@ -20,9 +20,9 @@ config MMC_DEBUG
 	  say N here.  This enables MMC core and driver debugging.
 
 config MMC_SUPPORT_STLOG
- 	bool "Enable storage log"
- 	depends on MMC && PROC_STLOG
- 	default y
+	bool "Enable storage log"
+	depends on MMC && PROC_STLOG
+	default y
 
 if MMC
 

@@ -1940,7 +1940,7 @@ int exynos7_devfreq_mif_init_parameter(struct devfreq_data_mif *data)
 			dfs_drex_mif_table = dfs_drex_mif_table_hnon_samsung[bank];
 		else
 			panic("Wrong MCP density : %x\n", density);
-	}if (vendor == 0x6) {
+	}else if (vendor == 0x6) {
 		dfs_drex_mif_table = dfs_drex_mif_table_hnon_samsung[bank];
 	} else if (vendor == 0x3) {
 		dfs_drex_mif_table = dfs_drex_mif_table_mnon_samsung[bank];

@@ -170,6 +170,7 @@ extern int s2mu003_block_write_device(struct i2c_client *i2c,
 		int reg, int bytes, void *src);
 
 extern int s2mu003_reg_read(struct i2c_client *i2c, int reg_addr);
+extern int s2mu003_reg_write_once(struct i2c_client *i2c, int reg_addr, u8 data);
 extern int s2mu003_reg_write(struct i2c_client *i2c, int reg_addr, u8 data);
 extern int s2mu003_assign_bits(struct i2c_client *i2c, int reg_addr, u8 mask,
 		u8 data);

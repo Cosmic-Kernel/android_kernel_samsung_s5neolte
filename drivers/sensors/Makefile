@@ -16,6 +16,7 @@ obj-$(CONFIG_SENSORS_CM3323)	    += cm3323.o
 obj-$(CONFIG_SENSORS_CM36652)	    += cm36652.o
 obj-$(CONFIG_SENSORS_CM36655)       += cm36655.o
 obj-$(CONFIG_SENSORS_CM36672P)     += cm36672p.o
+obj-$(CONFIG_SENSORS_CM36686)       += cm36686.o
 obj-$(CONFIG_SENSORS_TMD3782)       += tmd3782.o
 obj-$(CONFIG_SENSORS_TMD3700)       += tmd37xx.o
 obj-$(CONFIG_SENSORS_STK3013)       += stk3013.o

@@ -148,6 +148,7 @@
 		pinctrl-0 = <&sd2_clk &sd2_cmd &sd2_bus1 &sd2_bus4 &dwmmc2_cd_ext_irq>;
 		pinctrl-1 = <&sd2_clk_output &sd2_cmd_output &sd2_bus1 &sd2_bus4 &dwmmc2_cd_ext_irq>;
 		gpio-controller;
+		cd-type-gpio;
 		sec-sd-slot-type = <1>; /* Normal SD slot */
 		#gpio-cells = <2>;
 		cd-gpio = <&gpa3 4 0xf>;
@@ -1122,6 +1123,7 @@
 					&audio_codec_cod3022x>;
 		samsung,auxdev = <&s2801x>;
 		samsung,use-externel-jd;
+		samsung,codec-uses-i2scdclk;		
 		clocks = <&clock 151>;		 /* sclk_i2s */
 		clock-names = "codec_bclk";
 		mic-bias-mode = <1 2 0>;
@@ -1343,6 +1345,38 @@
 			input_booster,head_times = <130 0>;
 			input_booster,tail_times = <0 0>;
 			input_booster,phase_times = <0 0>;
+		};
+		booster_key@8 {
+			input_booster,label = "PEN & HOVER";
+			input_booster,type = <7>;	/* BOOSTER_DEVICE_PEN & HOVER */
+			input_booster,levels = <1 2>;
+			/* Frequency table */
+			/* for level	:	1_Head 2_Tail*/
+			input_booster,cpu_freqs = <1100000 900000>;
+			input_booster,hmp_boost = <0 0>;
+			input_booster,kfc_freqs = <1100000 900000>;
+			input_booster,mif_freqs = <0 0>;
+			input_booster,int_freqs = <0 0>;
+			/* Time table */
+			input_booster,head_times = <130 130>;
+			input_booster,tail_times = <500 500>;
+			input_booster,phase_times = <0 0>;
+		};
+		booster_key@9 {
+			input_booster,label = "GAMEPAD";
+			input_booster,type = <8>;	/* BOOSTER_DEVICE_GAMEPAD */
+			input_booster,levels = <1 2>;
+			/* Frequency table */
+			/* for level	:	1_Head 2_Tail*/
+			input_booster,cpu_freqs = <1300000 900000>;
+			input_booster,hmp_boost = <0 0>;
+			input_booster,kfc_freqs = <1300000 900000>;
+			input_booster,mif_freqs = <0 0>;
+			input_booster,int_freqs = <0 0>;
+			/* Time table */
+			input_booster,head_times = <130 130>;
+			input_booster,tail_times = <500 500>;
+			input_booster,phase_times = <0 0>;
 		}; // Input Booster -
 		/* If you need to add new key type, add it this position */
 	};
@@ -1514,5 +1548,36 @@
 			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
+	};
+
+	sec_thermistor@0 {
+		compatible = "samsung,sec-ap-thermistor";
+		status = "okay";
+
+		adc_array = <287 296 306 316 326 335 345 355 365 374
+				          384 409 434 459 484 509 515 521 527 533
+					  539 555 572 588 605 627 649 672 694 719
+					  745 766 788 806 824 874 915 956 973 990
+					  1015 1050 1084 1121 1155 1192 1235 1271 1308 1353
+					  1399 1435 1471 1507 1543 1579 1627 1676 1724 1773
+					  1822 1861 1900 1939 1978 2017 2056 2095 2134 2173
+					  2212 2242 2275 2308 2341 2374 2419 2463 2508 2552
+					  2597 2629 2661 2694 2726 2758 2790 2823 2855 2883
+					  2911 2949 2975 3001 3027 3054 3080 3105 3130 3155
+					  3180 3196 3213 3230 3246 3263 3271 3280 3288 3297 3305>;
+		temp_array = <900 890 880 870 860 850 840 830 820 810
+					   800 790 780 770 760 750 740 730 720 710
+					   700 690 680 670 660 650 640 630 620 610
+					   600 590 580 570 560 550 540 530 520 510
+					   500 490 480 470 460 450 440 430 420 410
+					   400 390 380 370 360 350 340 330 320 310
+					   300 290 280 270 260 250 240 230 220 210
+					   200 190 180 170 160 150 140 130 120 110
+					   100 90 80 70 60 50 40 30 20 10
+					   0 (-10) (-20) (-30) (-40) (-50) (-60) (-70) (-80) (-90)
+					   (-100) (-110) (-120) (-130) (-140) (-150) (-160) (-170) (-180) (-190) (-200)>;
+		io-channels = <&exynos_adc 0>;
+		io-channel-names = "adc-ap-temp";
+		io-channel-ranges;
 	};
 };

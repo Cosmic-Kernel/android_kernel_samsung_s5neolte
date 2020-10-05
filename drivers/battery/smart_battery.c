@@ -1204,9 +1204,6 @@ static void sec_bat_discharging_check(struct sec_battery_info *battery)
 static void sec_bat_chg_temperature_check(
 	struct sec_battery_info *battery)
 {
-	if (battery->skip_chg_temp_check)
-		return;
-
 	if (battery->siop_level >= 100 &&
 			((battery->cable_type == POWER_SUPPLY_TYPE_HV_MAINS) ||
 			 (battery->cable_type == POWER_SUPPLY_TYPE_HV_ERR))) {
@@ -1558,20 +1555,6 @@ static bool sec_bat_time_management(
 	dev_info(battery->dev,
 		"%s: Charging Time : %ld secs\n", __func__,
 		battery->charging_passed_time);
-
-	if (battery->pdata->chg_temp_check && battery->skip_chg_temp_check) {
-		if ((battery->cable_type == POWER_SUPPLY_TYPE_HV_MAINS ||
-			battery->cable_type == POWER_SUPPLY_TYPE_HV_ERR ||
-			battery->cable_type == POWER_SUPPLY_TYPE_WIRELESS) &&
-			battery->charging_passed_time >= battery->pdata->chg_skip_check_time) {
-				battery->skip_chg_temp_check = false;
-				dev_info(battery->dev,
-					"%s: skip_chg_temp_check(%d), Charging Time : %ld secs\n",
-					__func__,
-					battery->skip_chg_temp_check,
-					battery->charging_passed_time);
-		}
-	}
 
 	switch (battery->status) {
 	case POWER_SUPPLY_STATUS_FULL:
@@ -4617,7 +4600,6 @@ static int __devinit sec_battery_probe(struct platform_device *pdev)
 	battery->is_hc_usb = false;
 	battery->ignore_siop = false;
 
-	battery->skip_chg_temp_check = false;
 #if defined(CONFIG_BATTERY_SWELLING_SELF_DISCHARGING)
 	battery->self_discharging = false;
 	battery->force_discharging = false;

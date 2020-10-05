@@ -105,7 +105,7 @@ enum {
 #define SM5705_OTGCURRENT_MASK                  0xC
 #define SM5705_EN_DISCHG_FORCE_MASK             0x02
 
-#define INPUT_CURRENT_TA		                1000
+#define INPUT_CURRENT_TA		                500
 #define INPUT_CURRENT_WPC		                500
 
 struct sm5705_charger_data {
@@ -162,6 +162,7 @@ struct sm5705_charger_data {
 	// temp for rev2 SW WA
 	bool is_rev2_wa_done;
 
+	int vbus_changing;
 	bool afc_detect;
 	bool wc_afc_detect;
 	bool is_mdock;

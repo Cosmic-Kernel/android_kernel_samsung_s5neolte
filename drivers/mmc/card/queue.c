@@ -573,9 +573,10 @@ int mmc_queue_suspend(struct mmc_queue *mq, int wait)
 					q->queue_flags, q->in_flight[0], q->in_flight[1]);
 		} else if (wait) {
 			printk("%s: mq->flags: %x, q->queue_flags: 0x%lx, \
-					q->in_flight (%d, %d) \n",
+					q->in_flight (%d, %d), rc: %d, sem_count: %d \n",
 					mmc_hostname(mq->card->host), mq->flags,
-					q->queue_flags, q->in_flight[0], q->in_flight[1]);
+					q->queue_flags, q->in_flight[0], q->in_flight[1],
+					rc, mq->thread_sem.count);
 			mutex_lock(&q->sysfs_lock);
 			queue_flag_set_unlocked(QUEUE_FLAG_DYING, q);
 

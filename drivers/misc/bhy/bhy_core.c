@@ -63,10 +63,14 @@ static int axis_matrix[8][9] = {
 	{ 0, -1, 0, -1, 0, 0, 0, 0, -1,}, /* -Y -X Z */
 };
 
+static int check_watchdog_reset(struct bhy_client_data *client_data);
+void report_last_step_counter_data(struct bhy_client_data *client_data);
+
 static void int_debug(struct bhy_client_data *client_data,
 	char *log, const char *func, int line)
 {
 	static int count;
+	int ret;
 
 	if (count++ > INT_DEBUG_COUNT) {
 		printk(KERN_INFO "[D]" KERN_DEBUG MODULE_TAG
@@ -74,6 +78,8 @@ static void int_debug(struct bhy_client_data *client_data,
 
 		disable_irq_nosync(client_data->data_bus.irq);
 		client_data->irq_force_disabled = true;
+
+		ret = check_watchdog_reset(client_data);
 
 		/*
 		printk(KERN_INFO "[D]" KERN_DEBUG MODULE_TAG
@@ -1436,7 +1442,7 @@ static int mcu_monitor_thread(void *arg)
 			/* Reset by MCU Watchdog. */
 			if (check_watchdog_reset(client_data)) {
 				client_data->cnt_no_response++;
-				PINFO("MCU Mlafunction Detected. %d/3", client_data->cnt_no_response);
+				PINFO("MCU Malfunction Detected. %d/3", client_data->cnt_no_response);
 			}
 
 			if (!client_data->skip_reset && (client_data->cnt_no_response > 0)) {
@@ -1543,25 +1549,29 @@ void process_pedometer(struct bhy_client_data *client_data, u8 *data)
 void process_step(struct bhy_client_data *client_data, u8 *data)
 {
 	struct pedometer_data new_data;
-	unsigned int current_step = 0, step_diff = 0;
-	static unsigned int last_step;
+	unsigned int step_diff = 0;
+	static int err_count = 0;
 
 	if (!client_data->step_det_enabled
-			&& !client_data->step_cnt_enabled)
+		&& !client_data->step_cnt_enabled)
 		return;
 
 	memcpy(&new_data, data, sizeof(new_data));
 
 	/* normal mode */
-	if (!new_data.data_index) {
+	if ((new_data.data_index == 0) && (new_data.end_time == 0)) {
 		if (client_data->interrupt_mask >= NEW_STEP) {
 			/* stop walking */
 			if (client_data->interrupt_mask & STOP_WALK)
 				return;
 
-			current_step = new_data.walk_count;
-			step_diff = current_step - last_step;
-			last_step = current_step;
+			step_diff = new_data.walk_count - client_data->step_count;
+
+			if (step_diff > 1000) {
+				PINFO("STEP: [ERROR] DIFF = %u => 0, step_count = %u",
+				step_diff, client_data->step_count);
+				step_diff = 0;
+			}
 
 			if (step_diff > FIRST_STEP) {
 				if (client_data->interrupt_mask & NEW_STEP) {
@@ -1574,16 +1584,37 @@ void process_step(struct bhy_client_data *client_data, u8 *data)
 				step_diff = 1;
 			}
 		}
-
 	/* logging mode */
 	} else {
-		step_diff += new_data.walk_count;
-		step_diff += new_data.run_count;
-		last_step += step_diff;
+		step_diff = new_data.walk_count + new_data.run_count;
+
+		if (step_diff > 1000 || new_data.step_status != 3) {
+			step_diff = 0;
+			err_count++;
+			/* Report immediately.
+			Reason is that since error is occured,
+			there is no way to guarantee recover of data */
+			client_data->late_step_report = false;
+		} else {
+			client_data->late_step_report = true;
+			if (client_data->start_index > 0 &&
+				client_data->current_index == 1) {
+				client_data->late_step_report = false;
+			}
+		}
 	}
 
-	if (client_data->step_cnt_enabled)
+
+	if (client_data->step_cnt_enabled) {
+		PDEBUG("STEP: [CHECK] diff = %u, count = %u, sum = %u",
+			step_diff, client_data->step_count,
+			(client_data->step_count + step_diff));
 		client_data->step_count += step_diff;
+	}
+    
+	if (err_count > 0)
+		PINFO("STEP: [ERROR] %d", err_count);
+        
 
 	if (client_data->step_det_enabled)
 		if (step_diff)
@@ -1628,19 +1659,27 @@ void process_data(struct bhy_client_data *client_data, u8 *data, u16 handle)
 		break;
 
 	case AR_SENSOR:
-		PINFO("ar: %d", data[0]);
+		PINFO("AR : %d", data[0]);
 		break;
 
 	case PEDOMETER_SENSOR:
 		memcpy(&new_data, data, sizeof(new_data));
 		if (new_data.data_index > MAX_LOGGING_SIZE) {
-			PINFO("PEDO: Wrong data = %u", new_data.data_index);
+			PINFO("PEDO: [DMY] %u", new_data.data_index);
 		} else {
-			PINFO("PEDO: %u, %d, %d, %u, %lld, %lld",
-				new_data.data_index, new_data.walk_count,
-				new_data.run_count, new_data.step_status,
-				mcu_crystal_to_nano(new_data.start_time),
-				mcu_crystal_to_nano(new_data.end_time));
+			if (new_data.data_index == 0) {
+				PINFO("PEDO: [NML] %u, %d, %d, %u, %lld, %lld",
+					new_data.data_index, new_data.walk_count,
+					new_data.run_count, new_data.step_status,
+					mcu_crystal_to_nano(new_data.start_time),
+					mcu_crystal_to_nano(new_data.end_time));
+			} else {
+				PINFO("PEDO: [LOG] %u, %d, %d, %u, %lld, %lld",
+					new_data.data_index, new_data.walk_count,
+					new_data.run_count, new_data.step_status,
+					mcu_crystal_to_nano(new_data.start_time),
+					mcu_crystal_to_nano(new_data.end_time));
+			}
 
 			process_pedometer(client_data, data);
 			process_step(client_data, data);
@@ -1693,9 +1732,11 @@ step_cnt:
 	if (client_data->step_cnt_enabled) {
 		if (client_data->last_step_count == client_data->step_count)
 			return;
+		if (client_data->late_step_report == true)
+			return;
 
 		q->frames[q->head].handle = BHY_SENSOR_HANDLE_STEP_COUNTER;
-		memcpy(q->frames[q->head].data,	&client_data->step_count,
+		memcpy(q->frames[q->head].data, &client_data->step_count,
 				BHY_SENSOR_DATA_LEN_STEP_COUNTER);
 
 		if (q->head == BHY_FRAME_SIZE - 1)
@@ -1712,6 +1753,40 @@ step_cnt:
 		}
 
 		client_data->last_step_count = client_data->step_count;
+	}
+}
+
+void report_last_step_counter_data(
+	struct bhy_client_data *client_data)
+{
+	struct frame_queue *q = &client_data->data_queue;
+	if (client_data->step_cnt_enabled) {
+		mutex_lock(&q->lock);
+
+		PINFO("STEP: [%d -> %d]",
+			client_data->last_step_count, client_data->step_count);
+
+		q->frames[q->head].handle = BHY_SENSOR_HANDLE_STEP_COUNTER;
+		memcpy(q->frames[q->head].data, &client_data->step_count,
+			BHY_SENSOR_DATA_LEN_STEP_COUNTER);
+
+		if (q->head == BHY_FRAME_SIZE - 1)
+			q->head = 0;
+		else
+			++q->head;
+		if (q->head == q->tail) {
+			frame_debug("One frame data lost",
+				__func__, __LINE__);
+			if (q->tail == BHY_FRAME_SIZE - 1)
+				q->tail = 0;
+			else
+				++q->tail;
+		}
+		mutex_unlock(&q->lock);
+		client_data->last_step_count = client_data->step_count;
+
+		input_event(client_data->input, EV_MSC, MSC_RAW, 0);
+		input_sync(client_data->input);
 	}
 }
 
@@ -1974,6 +2049,14 @@ static void bhy_read_fifo_data(struct bhy_client_data *client_data)
 			__func__, __LINE__);
 		return;
 	}
+
+	/* Over sized FIFO detected */
+	if (bytes_remain > BHY_FIFO_LEN_MAX) {
+		mutex_unlock(&client_data->mutex_bus_op);
+		PDEBUG("Over sized FIFO detected");
+		return;
+	}
+
 	ret = bhy_read_reg(client_data, BHY_REG_FIFO_BUFFER_0,
 			client_data->fifo_buf, bytes_remain);
 	if (ret < 0) {
@@ -2526,12 +2609,15 @@ static ssize_t bhy_store_sensor_conf(struct device *dev
 			return ret;
 
 		client_data->step_det_enabled = buf[0] | buf[1];
+		PINFO("Step Detector[OX]: %d", client_data->step_det_enabled);
 	} else if (client_data->sensor_sel == BHY_SENSOR_HANDLE_STEP_COUNTER) {
 		ret = enable_pedometer(client_data, (bool)(buf[0] | buf[1]));
 		if (ret < 0)
 			return ret;
 
 		client_data->step_cnt_enabled = buf[0] | buf[1];
+		PINFO("Step Counter[OX]: %d", client_data->step_cnt_enabled);
+		report_last_step_counter_data(client_data);
 	} else if (client_data->sensor_sel == BHY_SENSOR_HANDLE_TILT_DETECTOR) {
 		client_data->tilt_enabled = buf[0] | buf[1];
 	} else if (client_data->sensor_sel
@@ -6443,12 +6529,13 @@ static ssize_t shealth_cadence_enable_store(struct device *dev,
 {
 	struct bhy_client_data *client_data = dev_get_drvdata(dev);
 	int64_t enable;
-	int ret;
+	int ret = 0;
 
 	if (kstrtoll(buf, 10, &enable) < 0)
 		return -EINVAL;
 
-	ret = enable_logging(client_data, (bool)enable);
+	/* ret = enable_logging(client_data, (bool)enable); */
+    PINFO("log_mode : %d", client_data->log_mode);
 	if (ret < 0)
 		return ret;
 
@@ -6587,7 +6674,7 @@ static int enable_sensor(struct bhy_client_data *client_data,
 
 static int enable_pedometer(struct bhy_client_data *client_data, bool enable)
 {
-	static int count;
+	static int count = 0;
 	int ret;
 
 	if (enable) {
@@ -7513,6 +7600,7 @@ int bhy_probe(struct bhy_data_bus *data_bus)
 #endif /*~ BHY_AR_HAL_SUPPORT */
 
 	bhy_init_sensor_type_data_len(client_data);
+	client_data->late_step_report = false;
 
 	wake_lock_init(&client_data->wlock, WAKE_LOCK_SUSPEND, "bhy");
 
@@ -7579,12 +7667,21 @@ int bhy_suspend(struct device *dev)
 
 	PINFO("Enter suspend");
 
+	/*
 	if (client_data->step_det_enabled || client_data->step_cnt_enabled) {
 		if (!client_data->pedo_enabled) {
 			ret = enable_logging(client_data, true);
 			if (ret < 0)
 				return ret;
 		}
+	}
+	*/
+	if (client_data->step_det_enabled ||
+		client_data->step_cnt_enabled ||
+		client_data->pedo_enabled) {
+		ret = enable_logging(client_data, true);
+		if (ret < 0)
+			return ret;
 	}
 
 	mutex_lock(&client_data->mutex_bus_op);
@@ -7700,12 +7797,21 @@ int bhy_resume(struct device *dev)
 	input_sync(client_data->input);
 #endif /*~ BHY_TS_LOGGING_SUPPORT */
 
+	/*
 	if (client_data->step_det_enabled || client_data->step_cnt_enabled) {
 		if (!client_data->pedo_enabled) {
 			ret = enable_logging(client_data, false);
 			if (ret < 0)
 				return ret;
 		}
+	}
+	*/
+	if (client_data->step_det_enabled ||
+		client_data->step_cnt_enabled ||
+		client_data->pedo_enabled) {
+		ret = enable_logging(client_data, false);
+		if (ret < 0)
+			return ret;
 	}
 
 	return 0;

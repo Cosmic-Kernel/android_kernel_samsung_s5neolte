@@ -111,7 +111,8 @@
 	initial6: initial-state {
 		PIN_IN(gpb0-2, DOWN, LV1);	/* NC */
 		PIN_IN(gpb0-3, DOWN, LV1);	/* NC */
-
+		PIN_IN(gpb1-0, DOWN, LV1);    /* NC */ 
+        PIN_IN(gpb1-1, DOWN, LV1);    /* NC */ 
 		PIN_IN(gpb2-4, DOWN, LV1);	/* NC */
 		PIN_IN(gpb2-6, DOWN, LV1);	/* NC */
 		PIN_IN(gpb2-7, DOWN, LV1);	/* NC */

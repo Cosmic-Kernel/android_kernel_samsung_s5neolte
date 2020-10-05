@@ -29,6 +29,7 @@
 #include <linux/delay.h>
 #include <linux/host_notify.h>
 #include <linux/string.h>
+#include <linux/sec_ext.h>
 
 #include <linux/muic/muic.h>
 
@@ -468,6 +469,62 @@ static ssize_t muic_set_apo_factory(struct device *dev,
 	return count;
 }
 
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5705_AFC) || defined(CONFIG_MUIC_HV)
+static ssize_t muic_show_afc_disable(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	muic_data_t *pmuic = dev_get_drvdata(dev);
+	struct muic_platform_data *pdata = pmuic->pdata;
+
+	if (pdata->afc_disable) {
+		pr_info("%s:%s AFC DISABLE\n", MUIC_DEV_NAME, __func__);
+		return sprintf(buf, "1\n");
+	}
+
+	pr_info("%s:%s AFC ENABLE", MUIC_DEV_NAME, __func__);
+	return sprintf(buf, "0\n");
+}
+
+static ssize_t muic_set_afc_disable(struct device *dev,
+				    struct device_attribute *attr,
+				    const char *buf, size_t count)
+{
+	muic_data_t *pmuic = dev_get_drvdata(dev);
+	struct muic_platform_data *pdata = pmuic->pdata;
+	bool curr_val = pdata->afc_disable;
+	int param_val, ret = 0;
+
+	/* Disable AFC */
+	if (!strncasecmp(buf, "1", 1))
+		pdata->afc_disable = true;
+	/* Enable AFC */
+	else if (!strncasecmp(buf, "0", 1))
+		pdata->afc_disable = false;
+	else {
+		pr_warn("%s:%s invalid value\n", MUIC_DEV_NAME, __func__);
+		return count;
+	}
+
+	param_val = pdata->afc_disable ? '1' : '0';
+
+#ifdef CM_OFFSET
+	if ((ret = sec_set_param(CM_OFFSET + 1, (char)param_val)) < 0) {
+		pr_err("%s:set_param failed - %02x:%02x(%d)\n", __func__,
+				param_val, curr_val, ret);
+		pdata->afc_disable = curr_val;
+		return ret;
+	}
+#else
+	pr_err("%s:set_param is NOT supported! - %02x:%02x(%d)\n", __func__,
+				param_val, curr_val, ret);
+#endif
+	pr_info("%s:%s afc_disable:%d (AFC %s)\n", MUIC_DEV_NAME, __func__,
+		pdata->afc_disable, pdata->afc_disable ? "Disabled": "Enabled");
+
+	return count;
+}
+#endif
+
 static DEVICE_ATTR(uart_en, 0664, muic_show_uart_en, muic_set_uart_en);
 static DEVICE_ATTR(uart_sel, 0664, muic_show_uart_sel,
 		muic_set_uart_sel);
@@ -489,6 +546,10 @@ static DEVICE_ATTR(audio_path, 0664,
 static DEVICE_ATTR(apo_factory, 0664,
 		muic_show_apo_factory,
 		muic_set_apo_factory);
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5705_AFC) || defined(CONFIG_MUIC_HV)
+static DEVICE_ATTR(afc_disable, 0664,
+		muic_show_afc_disable, muic_set_afc_disable);
+#endif
 
 static struct attribute *muic_attributes[] = {
 	&dev_attr_uart_en.attr,
@@ -506,6 +567,9 @@ static struct attribute *muic_attributes[] = {
 	&dev_attr_attached_dev.attr,
 	&dev_attr_audio_path.attr,
 	&dev_attr_apo_factory.attr,
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5705_AFC) || defined(CONFIG_MUIC_HV)
+	&dev_attr_afc_disable.attr,
+#endif
 	NULL
 };
 

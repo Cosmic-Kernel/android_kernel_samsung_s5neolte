@@ -2689,8 +2689,6 @@ int fimc_is_ischain_power(struct fimc_is_device_ischain *device, int on)
 		/* select flash control reg */
 		if (core->current_position == SENSOR_POSITION_REAR) {
 			s2mu005_led_select_ctrl(S2MU005_FLED_CH1);
-		} else {
-			s2mu005_led_select_ctrl(S2MU005_FLED_CH2);
 		}
 #endif
 		set_bit(FIMC_IS_ISCHAIN_POWER_ON, &device->state);
@@ -2721,7 +2719,7 @@ int fimc_is_ischain_power(struct fimc_is_device_ischain *device, int on)
 
 #if defined(CONFIG_LEDS_S2MU005_FLASH) && defined(CONFIG_LEDS_SUPPORT_FRONT_FLASH)
 		/* default rear flash */
-		s2mu005_led_select_ctrl(S2MU005_FLED_CH1);
+		s2mu005_led_select_ctrl(S2MU005_FLED_OFF);
 #endif
 		clear_bit(FIMC_IS_ISCHAIN_POWER_ON, &device->state);
 	}
@@ -6518,6 +6516,12 @@ static int fimc_is_ischain_scp_cfg(struct fimc_is_device_ischain *device,
 	struct param_dma_output *dma_output;
 	struct fimc_is_subdev *scp;
 	u32 scp_width, scp_height;
+#ifdef ENABLE_FD_SW
+	struct param_fd_config *fd_config;
+#ifdef ENABLE_FD_DMA_INPUT
+	struct param_dma_input  *dma_input;
+#endif
+#endif
 
 	scp = &device->scp;
 	scp_width = scp->output.crop.w;
@@ -6568,6 +6572,36 @@ static int fimc_is_ischain_scp_cfg(struct fimc_is_device_ischain *device,
 	*lindex |= LOWBIT_OF(PARAM_SCALERP_OTF_OUTPUT);
 	*hindex |= HIGHBIT_OF(PARAM_SCALERP_OTF_OUTPUT);
 	(*indexes)++;
+
+#ifdef ENABLE_FD_SW
+	/* Retry if FD enable command transmission fail */
+	if (!test_bit(FIMC_IS_SUBDEV_RUN, &device->vra.state))
+		goto vra_bypass;
+
+#ifdef ENABLE_FD_DMA_INPUT
+	dma_input = fimc_is_itf_g_param(device, frame, PARAM_FD_DMA_INPUT);
+	dma_input->width = scp_width;
+	dma_input->height = scp_height;
+	*lindex |= LOWBIT_OF(PARAM_FD_DMA_INPUT);
+	*hindex |= HIGHBIT_OF(PARAM_FD_DMA_INPUT);
+#else
+	otf_input = fimc_is_itf_g_param(device, frame, PARAM_FD_OTF_INPUT);
+	otf_input->width = scp_width;
+	otf_input->height = scp_height;
+	*lindex |= LOWBIT_OF(PARAM_FD_OTF_INPUT);
+	*hindex |= HIGHBIT_OF(PARAM_FD_OTF_INPUT);
+#endif
+	(*indexes)++;
+
+	fd_config = fimc_is_itf_g_param(device, frame, PARAM_FD_CONFIG);
+	fimc_is_lib_fd_size_check(device->fd_lib, fd_config, &scp->output,
+			scp_width, scp_height);
+	*lindex |= LOWBIT_OF(PARAM_FD_CONFIG);
+	*hindex |= HIGHBIT_OF(PARAM_FD_CONFIG);
+	(*indexes)++;
+
+vra_bypass:
+#endif
 
 	return ret;
 }

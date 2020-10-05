@@ -148,8 +148,9 @@ enum s2mu005_fled_mode {
 };
 
 enum s2mu005_fled_select {
-	S2MU005_FLED_CH1 = 1,	/* FLED1 */
-	S2MU005_FLED_CH2		/* FLED2 */
+	S2MU005_FLED_OFF,	/* OFF */
+	S2MU005_FLED_CH1,	/* FLED1 */
+	S2MU005_FLED_CH2	/* FLED2 */
 };
 
 #define S2MU005_FLASH_BRIGHTNESS(mA) mA<=400?(((mA-25)/25) & 0x1f):(((((mA-400)/50)+0x0F)) & 0x1f)
@@ -173,6 +174,9 @@ struct s2mu005_fled_platform_data {
 	unsigned int movie_brightness;
 	unsigned int torch_brightness;
 	unsigned int factory_brightness;
+#if defined(CONFIG_LEDS_SUPPORT_FRONT_FLASH)
+	unsigned int front_brightness;
+#endif
 
 	struct pinctrl *fled_pinctrl;
 	struct pinctrl_state *gpio_state_active;

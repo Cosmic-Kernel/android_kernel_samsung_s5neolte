@@ -89,7 +89,7 @@ enum {
 #define CAL_SKIP_ADC		11
 #define CAL_FAIL_ADC		18
 
-#define PS_CONF1_VALUE		0x6768
+#define PS_CONF1_VALUE		0x7748
 /* register settings */
 static u16 als_reg_setting[ALS_REG_NUM][2] = {
 	{REG_CS_CONF1, LIGHT_ENABLE},	/* enable */
@@ -132,8 +132,10 @@ struct cm36655_data {
 	struct hrtimer prox_timer;
 	struct workqueue_struct *light_wq;
 	struct workqueue_struct *prox_wq;
+	struct workqueue_struct *prox_wq_irq;
 	struct work_struct work_light;
 	struct work_struct work_prox;
+	struct work_struct work_prox_irq;
 	struct device *prox_dev;
 	struct device *light_dev;
 #if defined(CONFIG_SENSORS_CM36655_LEDA_EN_REGULATOR)
@@ -153,6 +155,9 @@ struct cm36655_data {
 	u16 white_data;
 	int count_log_time;
 	unsigned int prox_result;
+
+	u64 old_timestamp;
+	u8 prox_val;
 };
 
 int cm36655_i2c_read_word(struct cm36655_data *cm36655, u8 command, u16 *val)
@@ -608,6 +613,8 @@ static ssize_t proximity_enable_store(struct device *dev,
 	struct cm36655_data *cm36655 = dev_get_drvdata(dev);
 	bool new_value;
 
+	cm36655->old_timestamp = 0LL;
+
 	if (sysfs_streq(buf, "1"))
 		new_value = true;
 	else if (sysfs_streq(buf, "0"))
@@ -616,6 +623,7 @@ static ssize_t proximity_enable_store(struct device *dev,
 		SENSOR_ERR("invalid value %d\n", *buf);
 		return -EINVAL;
 	}
+	SENSOR_INFO("proximity onoff :%d \n",new_value);
 
 #if defined(CONFIG_SENSORS_CM36655_RESET_DEFENCE_CODE)
 	if (cm36655->reset_state == ON) {
@@ -663,8 +671,12 @@ static ssize_t proximity_enable_store(struct device *dev,
 	} else if (!new_value && (cm36655->power_state & PROXIMITY_ENABLED)) {
 		cm36655->power_state &= ~PROXIMITY_ENABLED;
 
+		if (cm36655->pdata->is_defence) {
+			cancel_work_sync(&cm36655->work_prox_irq);
+		}
 		disable_irq_wake(cm36655->irq);
 		disable_irq(cm36655->irq);
+
 		/* disable settings */
 		cm36655_i2c_write_word(cm36655, REG_PS_CONF1, 0x0001);
 #if defined(CONFIG_SENSORS_CM36655_LEDA_EN_REGULATOR)
@@ -1068,6 +1080,33 @@ irqreturn_t cm36655_irq_thread_fn(int irq, void *data)
 	return IRQ_HANDLED;
 }
 
+irqreturn_t cm36655_irq_thread_defence_fn(int irq, void *data)
+{
+	struct cm36655_data *cm36655 = data;
+
+	if(cm36655->pdata->irq != -1) {
+		struct timespec ts = ktime_to_timespec(ktime_get_boottime());
+		u64 timestamp = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
+
+		/*ignore if interrupt is occured in 10ms*/
+		if((timestamp - cm36655->old_timestamp < 10000000LL)
+			&& (cm36655->old_timestamp != 0)) {
+			SENSOR_ERR("exception case!!\n");
+			cm36655->old_timestamp = timestamp;
+			return IRQ_HANDLED;
+		}
+		cm36655->prox_val = gpio_get_value(cm36655->pdata->irq);
+		cm36655->old_timestamp = timestamp;
+
+		wake_lock_timeout(&cm36655->prox_wake_lock, 3 * HZ);
+		queue_work(cm36655->prox_wq_irq, &cm36655->work_prox_irq);
+	}
+
+	SENSOR_INFO("cm36655 irq_thread is called\n");
+
+	return IRQ_HANDLED;
+}
+
 static int cm36655_setup_reg(struct cm36655_data *cm36655)
 {
 	int err = 0, i = 0;
@@ -1131,9 +1170,17 @@ static int cm36655_setup_irq(struct cm36655_data *cm36655)
 	}
 
 	cm36655->irq = gpio_to_irq(pdata->irq);
-	rc = request_threaded_irq(cm36655->irq, NULL, cm36655_irq_thread_fn,
+
+	if (pdata->is_defence) {
+		rc = request_threaded_irq(cm36655->irq, NULL, cm36655_irq_thread_defence_fn,
 		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
 		"proximity_int", cm36655);
+	}
+	else {
+		rc = request_threaded_irq(cm36655->irq, NULL, cm36655_irq_thread_fn,
+		IRQF_TRIGGER_RISING | IRQF_TRIGGER_FALLING | IRQF_ONESHOT,
+			"proximity_int", cm36655);
+	}
 	if (rc < 0) {
 		SENSOR_ERR("irq:%d failed for qpio:%d err:%d\n",
 			cm36655->irq, pdata->irq, rc);
@@ -1228,6 +1275,29 @@ static void cm36655_get_avg_val(struct cm36655_data *cm36655)
 	cm36655->avg[0] = min;
 	cm36655->avg[1] = avg;
 	cm36655->avg[2] = max;
+}
+
+static void cm36655_work_func_prox_irq(struct work_struct *work)
+{
+	struct cm36655_data *cm36655 = container_of(work, struct cm36655_data,
+						  work_prox_irq);
+	u16 ps_data = 0;
+
+	/* disable INT */
+	disable_irq_nosync(cm36655->pdata->irq);
+
+	cm36655_i2c_read_word(cm36655, REG_PS_DATA, &ps_data);
+
+	if (cm36655->power_state & PROXIMITY_ENABLED) {
+		// 0 is close, 1 is far
+		input_report_abs(cm36655->prox_input_dev, ABS_DISTANCE, cm36655->prox_val);
+		input_sync(cm36655->prox_input_dev);
+	}
+
+	SENSOR_INFO("val = %u, ps_data = %u (close:0, far:1)\n", cm36655->prox_val, ps_data);
+
+	/* enable INT */
+	enable_irq(cm36655->pdata->irq);
 }
 
 static void cm36655_work_func_prox(struct work_struct *work)
@@ -1351,14 +1421,21 @@ static int cm36655_parse_dt(struct device *dev,
 		pdata->default_trim = DEFAULT_TRIM;
 	}
 
+	ret = of_property_read_u32(np, "cm36655,is_defence",
+		&pdata->is_defence);
+	if (ret < 0) {
+		SENSOR_INFO("Defence code is not applied\n");
+		pdata->is_defence = 0;
+	}
+
 	SENSOR_INFO("DefaultTHD[%d/%d] CancelTHD[%d/%d] PS_THD[0x%2x] CAL_SKIP[%d]\
-		CAL_FAIL[%d] ALS_REG_SETTING[0x%2x] ALS_REG_SETTING[0x%2x] PS_CONF[0x%2x] TRIM[%d]\n",
+		CAL_FAIL[%d] ALS_REG_SETTING[0x%2x] ALS_REG_SETTING[0x%2x] PS_CONF[0x%2x] TRIM[%d] DEFENCE[%d]\n",
 		pdata->default_hi_thd, pdata->default_low_thd,
 		pdata->cancel_hi_thd, pdata->cancel_low_thd,
 		ps_reg_init_setting[PS_THD][CMD], pdata->cal_skip_adc,
 		pdata->cal_fail_adc, als_reg_setting[0][CMD],
 		als_reg_setting[1][CMD], ps_reg_init_setting[PS_CONF1][CMD],
-		pdata->default_trim);
+		pdata->default_trim, pdata->is_defence);
 	return 0;
 }
 #else
@@ -1619,6 +1696,15 @@ static int cm36655_i2c_probe(struct i2c_client *client,
 	/* this is the thread function we run on the work queue */
 	INIT_WORK(&cm36655->work_prox, cm36655_work_func_prox);
 
+	/* this is defence code for i2c noise */
+	if (pdata->is_defence) {
+		cm36655->prox_wq_irq = create_singlethread_workqueue("cm36655_wq_irq");
+		if (cm36655->prox_wq_irq)
+			INIT_WORK(&cm36655->work_prox_irq, cm36655_work_func_prox_irq);
+		else
+			pdata->is_defence = 0;
+	}
+
 	/* allocate lightsensor input_device */
 	cm36655->light_input_dev = input_allocate_device();
 	if (!cm36655->light_input_dev) {
@@ -1704,6 +1790,9 @@ err_sensors_create_symlink_light:
 	input_unregister_device(cm36655->light_input_dev);
 err_input_register_device_light:
 err_input_allocate_device_light:
+	if (pdata->is_defence) {
+		destroy_workqueue(cm36655->prox_wq_irq);
+	}
 	destroy_workqueue(cm36655->prox_wq);
 err_create_prox_workqueue:
 	free_irq(cm36655->irq, cm36655);
@@ -1762,6 +1851,9 @@ static int cm36655_i2c_remove(struct i2c_client *client)
 	destroy_workqueue(cm36655->light_wq);
 	destroy_workqueue(cm36655->prox_wq);
 
+	if (cm36655->pdata->is_defence) {
+		destroy_workqueue(cm36655->prox_wq_irq);
+	}
 	/* sysfs destroy */
 	sensors_unregister(cm36655->light_dev, light_sensor_attrs);
 	sensors_unregister(cm36655->prox_dev, prox_sensor_attrs);

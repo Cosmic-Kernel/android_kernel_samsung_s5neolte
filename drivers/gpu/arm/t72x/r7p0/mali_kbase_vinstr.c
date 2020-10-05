@@ -313,13 +313,13 @@ static int kbasep_vinstr_create_kctx(struct kbase_vinstr_context *vinstr_ctx)
 		kbasep_vinstr_unmap_kernel_dump_buffer(vinstr_ctx);
 		kbase_destroy_context(vinstr_ctx->kctx);
 		vinstr_ctx->kctx = NULL;
+		GPU_LOG(DVFS_WARNING, DUMMY, 0u, 0u, "skip enable in attach hwcnt %d \n", err);
 		return err;
 	}
 
 #ifdef MALI_SEC_HWCNT
 	/* SEC_HWCNT doesn't use vinstr_ctx thread. it use legacy hwcnt vinstr_ctx */
-	if (vinstr_ctx->kbdev->hwcnt.is_hwcnt_attach == true)
-		return 0;
+	return 0;
 #endif
 
 	vinstr_ctx->thread = kthread_run(
@@ -1476,12 +1476,14 @@ struct kbase_vinstr_context *kbase_vinstr_init(struct kbase_device *kbdev)
 	vinstr_ctx->kbdev = kbdev;
 	vinstr_ctx->thread = NULL;
 
-	atomic_set(&vinstr_ctx->request_pending, 0);
-	init_waitqueue_head(&vinstr_ctx->waitq);
 #ifdef MALI_SEC_HWCNT
 	kbdev->hwcnt.is_hwcnt_attach = false;
 	kbdev->hwcnt.is_hwcnt_force_stop = false;
+	kbdev->hwcnt.timeout = (unsigned int)msecs_to_jiffies(100);
 #endif
+
+	atomic_set(&vinstr_ctx->request_pending, 0);
+	init_waitqueue_head(&vinstr_ctx->waitq);
 	return vinstr_ctx;
 }
 
@@ -1597,7 +1599,8 @@ int kbase_vinstr_hwc_dump(struct kbase_vinstr_client *cli,
 	KBASE_DEBUG_ASSERT(event_id < BASE_HWCNT_READER_EVENT_COUNT);
 	event_mask = 1 << event_id;
 
-	mutex_lock(&vinstr_ctx->lock);
+	if(!mutex_trylock(&vinstr_ctx->lock))
+		return -EBUSY;
 
 	if (vinstr_ctx->suspended) {
 		rcode = -EBUSY;
@@ -1706,7 +1709,7 @@ void kbasep_vinstr_detach_client_sec(struct kbase_vinstr_client *cli)
 {
 	kbasep_vinstr_detach_client(cli);
 }
-void kbase_vinstr_enable(struct kbase_vinstr_context *ctx)
+int kbase_vinstr_enable(struct kbase_vinstr_context *ctx)
 {
 	struct kbase_uk_hwcnt_setup setup;
 	struct exynos_context *platform;
@@ -1719,7 +1722,7 @@ void kbase_vinstr_enable(struct kbase_vinstr_context *ctx)
 	setup.shader_bm = platform->hwcnt_choose_shader;
 	setup.mmu_l2_bm = platform->hwcnt_choose_mmu_l2;
 
-	kbase_instr_hwcnt_enable_internal(ctx->kbdev, ctx->kctx, &setup);
+	return kbase_instr_hwcnt_enable_internal(ctx->kbdev, ctx->kctx, &setup);
 }
 
 void kbase_vinstr_disable(struct kbase_vinstr_context *ctx)

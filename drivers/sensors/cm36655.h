@@ -13,6 +13,7 @@ struct cm36655_platform_data {
 	int cal_skip_adc;
 	int cal_fail_adc;
 	int default_trim;
+	int is_defence;
 
 #if defined(CONFIG_SENSORS_CM36655_RESET_DEFENCE_CODE)
 	int pwr_en_gpio;

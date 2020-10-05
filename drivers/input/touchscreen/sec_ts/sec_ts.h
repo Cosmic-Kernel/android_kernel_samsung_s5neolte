@@ -421,6 +421,7 @@ struct sec_ts_data {
 	uint32_t flags;
 	unsigned char lowpower_flag;
 	bool lowpower_mode;
+	volatile int lowpower_status;
 	int touch_count;
 	int tx_count;
 	int rx_count;
@@ -441,6 +442,7 @@ struct sec_ts_data {
 	struct mutex lock;
 	struct mutex device_mutex;
 	struct mutex i2c_mutex;
+	struct mutex eventlock;
 
 #ifdef CONFIG_HAS_EARLYSUSPEND
 	struct early_suspend *early_suspend;
@@ -562,6 +564,10 @@ int sec_ts_execute_force_calibration(struct sec_ts_data *ts, int cal_mode);
 
 void sec_ts_delay(unsigned int ms);
 int sec_ts_fn_init(struct sec_ts_data *ts);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+extern void trustedui_mode_on(void);
+#endif
 
 extern unsigned int lcdtype;
 

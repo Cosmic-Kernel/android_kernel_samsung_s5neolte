@@ -325,6 +325,8 @@ struct exynos_context {
 	int gpu_min_clock;
 	int gpu_dvfs_start_clock;
 	int gpu_dvfs_config_clock;
+	int user_max_lock_input;
+	int user_min_lock_input;
 
 	/* gpu boost lock */
 	int boost_gpu_min_lock;

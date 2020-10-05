@@ -1367,13 +1367,14 @@ static int kbase_release(struct inode *inode, struct file *filp)
 			list_del(&element->link);
 			kfree(element);
 			found_element = true;
+			/* MALI_SEC_INTEGRATION */
+			kctx->destroying_context = true;
 		}
 	}
+	filp->private_data = NULL;
 	mutex_unlock(&kbdev->kctx_list_lock);
 	if (!found_element)
 		dev_warn(kbdev->dev, "kctx not in kctx_list\n");
-
-	filp->private_data = NULL;
 
 	mutex_lock(&kctx->vinstr_cli_lock);
 	/* If this client was performing hwcnt dumping and did not explicitly
@@ -1404,7 +1405,7 @@ static long kbase_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	u32 size = _IOC_SIZE(cmd);
 	struct kbase_context *kctx = filp->private_data;
 
-	if (size > CALL_MAX_SIZE)
+	if (size > CALL_MAX_SIZE || size <= 0)
 		return -ENOTTY;
 
 	if (0 != copy_from_user(&msg, (void __user *)arg, size)) {

@@ -28,6 +28,11 @@ static int sec_bat_adc_ap_read(int channel)
 	{
 	case SEC_BAT_ADC_CHANNEL_CABLE_CHECK:
 	case SEC_BAT_ADC_CHANNEL_BAT_CHECK:
+		ret = iio_read_channel_raw(&temp_adc[1], &data);
+		if (ret < 0)
+			pr_info("read channel error[%d]\n", ret);
+		else
+			pr_debug("BATT ADC(%d)\n", data);
 		break;
 	case SEC_BAT_ADC_CHANNEL_TEMP:
 	case SEC_BAT_ADC_CHANNEL_TEMP_AMBIENT:
@@ -54,6 +59,20 @@ static int sec_bat_adc_ap_read(int channel)
 			pr_info("read channel error[%d]\n", ret);
 		else
 			pr_info("INBAT ADC(%d)\n", data);
+		break;
+	case SEC_BAT_ADC_CHANNEL_DISCHARGING_CHECK:
+		ret = iio_read_channel_raw(&temp_adc[3], &data);
+		if (ret < 0)
+			pr_info("read channel error[%d]\n", ret);
+		else
+			pr_debug("DISCHARGING CHECK(%d)\n", data);
+		break;
+	case SEC_BAT_ADC_CHANNEL_DISCHARGING_NTC:
+		ret = iio_read_channel_raw(&temp_adc[4], &data);
+		if (ret < 0)
+			pr_info("read channel error[%d]\n", ret);
+		else
+			pr_debug("DISCHARGING NTC(%d)\n", data);
 		break;
 	default:
 		break;
@@ -95,6 +114,12 @@ static int adc_read_type(struct sec_battery_info *battery, int channel)
 {
 	int adc = 0;
 
+	if ((!battery->pdata->self_discharging_en) &&
+	    ((channel == SEC_BAT_ADC_CHANNEL_DISCHARGING_CHECK) ||
+	     (channel == SEC_BAT_ADC_CHANNEL_DISCHARGING_NTC))) {
+		pr_info("%s : Doesn't enable Self Discharging Algorithm\n", __func__);
+		return 0;
+	}
 	switch (battery->pdata->temp_adc_type)
 	{
 	case SEC_BATTERY_ADC_TYPE_NONE :

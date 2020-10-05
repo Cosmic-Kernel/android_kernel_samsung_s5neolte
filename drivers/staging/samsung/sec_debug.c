@@ -353,26 +353,24 @@ static u64 get_iowait_time(int cpu)
 static void sec_debug_dump_cpu_stat(void)
 {
 	int i, j;
-	unsigned long jif;
 	u64 user, nice, system, idle, iowait, irq, softirq, steal;
 	u64 guest, guest_nice;
 	u64 sum = 0;
 	u64 sum_softirq = 0;
 	unsigned int per_softirq_sums[NR_SOFTIRQS] = {0};
 	struct timespec boottime;
-	
+
 	char *softirq_to_name[NR_SOFTIRQS] = { "HI", "TIMER", "NET_TX", "NET_RX", "BLOCK", "BLOCK_IOPOLL", "TASKLET", "SCHED", "HRTIMER", "RCU" };
 
 	user = nice = system = idle = iowait = irq = softirq = steal = 0;
 	guest = guest_nice = 0;
 	getboottime(&boottime);
-	jif = boottime.tv_sec;
-	
+
 	for_each_possible_cpu(i) {
 		user	+= kcpustat_cpu(i).cpustat[CPUTIME_USER];
 		nice	+= kcpustat_cpu(i).cpustat[CPUTIME_NICE];
 		system	+= kcpustat_cpu(i).cpustat[CPUTIME_SYSTEM];
-		idle	+= get_idle_time(i); 
+		idle	+= get_idle_time(i);
 		iowait	+= get_iowait_time(i);
 		irq	+= kcpustat_cpu(i).cpustat[CPUTIME_IRQ];
 		softirq	+= kcpustat_cpu(i).cpustat[CPUTIME_SOFTIRQ];

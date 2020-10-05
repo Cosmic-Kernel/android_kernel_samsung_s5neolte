@@ -1893,9 +1893,11 @@ static void dw_mci_request(struct mmc_host *mmc, struct mmc_request *mrq)
 	struct dw_mci *host = slot->host;
 
 	if (!test_bit(DW_MMC_CARD_PRESENT, &slot->flags)) {
-		mrq->cmd->error = -ENOMEDIUM;
-		mmc_request_done(mmc, mrq);
-		return;
+		if (!mmc->card) {
+			mrq->cmd->error = -ENOMEDIUM;
+			mmc_request_done(mmc, mrq);
+			return;
+		}
 	}
 
 	if (!MMC_CHECK_CMDQ_MODE(host)) {
@@ -4129,7 +4131,7 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
     defined(CONFIG_BCM43454) || defined(CONFIG_BCM43454_MODULE)
 	if (host->pdata->cd_type == DW_MCI_CD_EXTERNAL) {
 		printk("%s, set DW_MCI_CD_EXTERNAL \n",mmc_hostname(mmc));
-		host->pdata->ext_cd_init(&dw_mci_notify_change, (void*)host);
+		host->pdata->ext_cd_init(&dw_mci_notify_change, (void*)host, mmc);
 	}
 #else /* CONFIG_BCM43455 || CONFIG_BCM43455_MODULE */
 	if (host->pdata->cd_type == DW_MCI_CD_EXTERNAL)
@@ -4291,15 +4293,16 @@ static struct dw_mci_of_quirks {
 void (*notify_func_callback)(void *dev_id, int state);
 void *mmc_host_dev = NULL;
 static DEFINE_MUTEX(notify_mutex_lock);
-
+struct mmc_host *wlan_mmc = NULL;
 static int ext_cd_init_callback(
-	void (*notify_func)(void *dev_id, int state), void *dev_id)
+	void (*notify_func)(void *dev_id, int state), void *dev_id, struct mmc_host *mmc) 
 {
 	printk("Enter %s\n",__FUNCTION__);
 	mutex_lock(&notify_mutex_lock);
 	WARN_ON(notify_func_callback);
 	notify_func_callback = notify_func;
 	mmc_host_dev = dev_id;
+	wlan_mmc = mmc;
 	mutex_unlock(&notify_mutex_lock);
 
 	return 0;
