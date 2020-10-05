@@ -150,7 +150,7 @@ static void update_color_position(struct mdnie_info *mdnie, unsigned int idx)
 	mutex_unlock(&mdnie->lock);
 }
 
-static int mdnie_calibration(int *r)
+extern int mdnie_calibration(int *r)
 {
 	int ret = 0;
 
