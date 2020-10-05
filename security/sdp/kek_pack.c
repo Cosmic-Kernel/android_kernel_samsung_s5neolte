@@ -189,11 +189,6 @@ int add_kek(int engine_id, kek_t *kek) {
 	kek_pack_t *pack;
 	kek_item_t *item;
 
-	item = kmalloc(sizeof(kek_item_t), GFP_KERNEL);
-	if (item == NULL) {
-		return -ENOMEM;
-	}
-
 	spin_lock(&del_kek_pack_lock);
 	KEK_PACK_LOGD("entered\n");
 	pack = find_kek_pack(engine_id);
@@ -203,21 +198,22 @@ int add_kek(int engine_id, kek_t *kek) {
 		return -ENOENT;
 	}
 
-	spin_lock(&pack->kek_list_lock);
-	if (find_kek_item(pack, kek->type)) {
-		spin_unlock(&pack->kek_list_lock);
-		spin_unlock(&del_kek_pack_lock);
-		kzfree(item);
-		return -EEXIST;
-	}
-	rc = __add_kek(pack, kek, item);
+	item = kmalloc(sizeof(kek_item_t), GFP_KERNEL);
+	if(item == NULL) {
+		rc = -ENOMEM;
+	} else {
+		spin_lock(&pack->kek_list_lock);
+		if(find_kek_item(pack, kek->type)) {
+			spin_unlock(&pack->kek_list_lock);
+			kzfree(item);		
+			return -EEXIST;
+		}
+		rc = __add_kek(pack, kek, item);
 
-	spin_unlock(&pack->kek_list_lock);
-	spin_unlock(&del_kek_pack_lock);
-	if (rc) {
-		KEK_PACK_LOGE("%s failed. rc = %d", __func__, rc);
-		kzfree(item);
+		spin_unlock(&pack->kek_list_lock);
 	}
+
+	if(rc) KEK_PACK_LOGE("%s failed. rc = %d", __func__, rc);
 
 	return rc;
 }
@@ -276,12 +272,15 @@ kek_t *get_kek(int engine_id, int kek_type, int *rc) {
 	    *rc = -EACCES;
 	    return NULL;
 	}
-
-	kek = kmalloc(sizeof(kek_t), GFP_KERNEL);
-	if (kek == NULL) {
-		*rc = -ENOMEM;
-		return NULL;
-	}
+	spin_lock(&pack->kek_list_lock);
+	item = find_kek_item(pack, kek_type);
+	spin_unlock(&pack->kek_list_lock);
+	if(item) {
+		kek_t *kek = kmalloc(sizeof(kek_t), GFP_KERNEL);
+		if(kek == NULL){
+		    *rc = -ENOMEM;
+		    return NULL;
+		}
 
 	spin_lock(&pack->kek_list_lock);
 	item = find_kek_item(pack, kek_type);

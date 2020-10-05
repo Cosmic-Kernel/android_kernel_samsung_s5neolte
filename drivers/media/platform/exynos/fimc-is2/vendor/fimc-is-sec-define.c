@@ -21,6 +21,9 @@
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)
 #include <linux/i2c.h>
 #include "fimc-is-device-eeprom.h"
+#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
+#include "fimc-is-device-sensor.h"
+#endif
 #endif
 bool crc32_fw_check = true;
 bool crc32_setfile_check = true;
@@ -1165,6 +1168,9 @@ int fimc_is_sec_rom_power_on(struct fimc_is_core *core, int position)
 	struct fimc_is_module_enum *module = NULL;
 	int sensor_id = 0;
 	int i = 0;
+#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
+	struct fimc_is_device_sensor *device_sensor;
+#endif
 
 	info("%s: Sensor position = %d.", __func__, position);
 
@@ -1175,8 +1181,12 @@ int fimc_is_sec_rom_power_on(struct fimc_is_core *core, int position)
 
 	for (i = 0; i < FIMC_IS_SENSOR_COUNT; i++) {
 		fimc_is_search_sensor_module(&core->sensor[i], sensor_id, &module);
-		if (module)
+		if (module) {
+#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
+			device_sensor = &core->sensor[i];
+#endif
 			break;
+		}
 	}
 
 	if (!module) {
@@ -1192,6 +1202,14 @@ int fimc_is_sec_rom_power_on(struct fimc_is_core *core, int position)
 		ret = -EINVAL;
 		goto p_err;
 	}
+
+#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
+	ret = fimc_is_sensor_mclk_on(device_sensor, GPIO_SCENARIO_ON, module_pdata->mclk_ch);
+	if (ret) {
+		err("mclk_on is fail(%d)", ret);
+		goto p_err;
+	}
+#endif
 
 	ret = module_pdata->gpio_cfg(module->pdev, SENSOR_SCENARIO_READ_ROM, GPIO_SCENARIO_ON);
 	if (ret) {
@@ -1210,6 +1228,9 @@ int fimc_is_sec_rom_power_off(struct fimc_is_core *core, int position)
 	struct fimc_is_module_enum *module = NULL;
 	int sensor_id = 0;
 	int i = 0;
+#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
+	struct fimc_is_device_sensor *device_sensor;
+#endif
 
 	info("%s: Sensor position = %d.", __func__, position);
 
@@ -1220,8 +1241,12 @@ int fimc_is_sec_rom_power_off(struct fimc_is_core *core, int position)
 
 	for (i = 0; i < FIMC_IS_SENSOR_COUNT; i++) {
 		fimc_is_search_sensor_module(&core->sensor[i], sensor_id, &module);
-		if (module)
+		if (module) {
+#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
+			device_sensor = &core->sensor[i];
+#endif
 			break;
+		};
 	}
 
 	if (!module) {
@@ -1243,6 +1268,13 @@ int fimc_is_sec_rom_power_off(struct fimc_is_core *core, int position)
 		err("gpio_cfg is fail(%d)", ret);
 		goto p_err;
 	}
+#if defined(CONFIG_CAMERA_OTPROM_SUPPORT_REAR) || defined(CONFIG_CAMERA_OTPROM_SUPPORT_FRONT)
+	ret = fimc_is_sensor_mclk_off(device_sensor, GPIO_SCENARIO_OFF, module_pdata->mclk_ch);
+	if (ret) {
+		err("mclk_on is fail(%d)", ret);
+		goto p_err;
+	}
+#endif
 
 p_err:
 	return ret;
@@ -1367,7 +1399,7 @@ static int fimc_is_i2c_config(struct i2c_client *client, bool onoff)
 		/* ON */
 		pinctrl_i2c = devm_pinctrl_get_select(i2c_dev, "on_i2c");
 		if (IS_ERR_OR_NULL(pinctrl_i2c)) {
-			printk(KERN_ERR "%s: Failed to configure i2c pin\n", __func__);
+			printk(KERN_ERR "%s: don't use on_i2c\n", __func__);
 		} else {
 			devm_pinctrl_put(pinctrl_i2c);
 		}
@@ -1375,7 +1407,7 @@ static int fimc_is_i2c_config(struct i2c_client *client, bool onoff)
 		/* OFF */
 		pinctrl_i2c = devm_pinctrl_get_select(i2c_dev, "off_i2c");
 		if (IS_ERR_OR_NULL(pinctrl_i2c)) {
-			printk(KERN_ERR "%s: Failed to configure i2c pin\n", __func__);
+			printk(KERN_ERR "%s: don't use off_i2c\n", __func__);
 		} else {
 			devm_pinctrl_put(pinctrl_i2c);
 		}
@@ -1684,8 +1716,8 @@ crc_retry:
 		memcpy(finfo->shading_ver, &buf[EEP_AP_SHADING_VER_START_ADDR], FIMC_IS_SHADING_VER_SIZE);
 		finfo->shading_ver[FIMC_IS_SHADING_VER_SIZE] = '\0';
 
-		sysfs_finfo.af_cal_pan = *((u32 *)&cal_buf[FROM_AF_CAL_PAN_ADDR]);
-		sysfs_finfo.af_cal_macro = *((u32 *)&cal_buf[FROM_AF_CAL_MACRO_ARRD]);
+		sysfs_finfo.af_cal_pan = *((u32 *)&buf[FROM_AF_CAL_PAN_ADDR]);
+		sysfs_finfo.af_cal_macro = *((u32 *)&buf[FROM_AF_CAL_MACRO_ARRD]);
 
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_OIS)
 		finfo->ois_cal_start_addr = *((u32 *)&buf[EEP_HEADER_OIS_CAL_START_ADDR]);
@@ -1843,7 +1875,7 @@ crc_retry:
 		} else {
 			pr_info("dump folder exist, Dump EEPROM cal data.\n");
 			if (write_data_to_file("/data/media/0/dump/eeprom_cal.bin", cal_buf,
-									FIMC_IS_DUMP_EEPROM_CAL_SIZE, &pos) < 0) {
+									cal_size, &pos) < 0) {
 				pr_info("Failed to dump cal data.\n");
 				goto dump_err;
 			}
@@ -3561,7 +3593,7 @@ int fimc_is_sec_fw_sel_eeprom(struct device *dev, int id, bool headerOnly)
 				is_ldo_enabled[0] = true;
 			}
 
-			info("Camera: read cal data from Rear EEPROM\n");
+			info("Camera: read cal data from Rear EEPROM, headerOnly(%d)\n", headerOnly);
 			if (headerOnly) {
 #if defined(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)
 				fimc_is_sec_read_eeprom_header(dev);

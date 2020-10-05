@@ -216,6 +216,8 @@ static void muic_handle_attach(muic_data_t *pmuic,
 		break;
 	case ATTACHED_DEV_TA_MUIC:
 		attach_ta(pmuic);
+		if (pmuic->is_camera_on)
+			pmuic->is_afc_5v = 1;
 		pmuic->attached_dev = new_dev;
 		break;
 	case ATTACHED_DEV_JIG_UART_OFF_MUIC:
@@ -287,7 +289,8 @@ static void muic_handle_detach(muic_data_t *pmuic)
 	/* ENAFC set '0' */
 	pmuic->regmapdesc->afcops->afc_ctrl_reg(pmuic->regmapdesc, AFCCTRL_ENAFC, 0);
 #endif
-	//muic_enable_accdet(pmuic);
+	pmuic->is_afc_5v = 0;
+	pmuic->check_charger_lcd_on = false;
 
 	switch (pmuic->attached_dev) {
 	case ATTACHED_DEV_JIG_USB_OFF_MUIC:

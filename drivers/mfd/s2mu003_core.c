@@ -56,6 +56,7 @@ const static struct resource s2mu003_charger_res[] = {
 	S2MU003_DECLARE_IRQ(S2MU003_BSTINLV_IRQ),
 	S2MU003_DECLARE_IRQ(S2MU003_BSTILIM_IRQ),
 	S2MU003_DECLARE_IRQ(S2MU003_VMIDOVP_IRQ),
+	S2MU003_DECLARE_IRQ(S2MU003_WDT_IRQ),
 };
 
 static struct mfd_cell s2mu003_charger_devs[] = {
@@ -158,6 +159,20 @@ static inline int s2mu003_write_device(struct i2c_client *i2c,
 	return ret;
 }
 
+static inline int s2mu003_write_device_once(struct i2c_client *i2c,
+				int reg, void *src)
+{
+	int ret;
+	uint8_t *data;
+	data = src;
+	ret = i2c_smbus_write_byte_data(i2c, reg, *data);
+
+	if (ret < 0) {
+		pr_err("%s:i2c err on writing reg(0x%x)\n", __func__, reg);
+	}
+	return ret;
+}
+
 int s2mu003_block_read_device(struct i2c_client *i2c,
 			int reg, int bytes, void *dest)
 {
@@ -205,6 +220,23 @@ int s2mu003_reg_read(struct i2c_client *i2c, int reg)
 		return (int)data;
 }
 EXPORT_SYMBOL(s2mu003_reg_read);
+
+int s2mu003_reg_write_once(struct i2c_client *i2c, int reg,
+		u8 data)
+{
+	struct s2mu003_mfd_chip *chip = i2c_get_clientdata(i2c);
+	int ret;
+
+	if (!chip)
+		dev_err(&i2c->dev, "Failed to get the clientdata\n");
+
+	mutex_lock(&chip->io_lock);
+	ret = s2mu003_write_device_once(i2c, reg, &data);
+	mutex_unlock(&chip->io_lock);
+
+	return ret;
+}
+EXPORT_SYMBOL(s2mu003_reg_write_once);
 
 int s2mu003_reg_write(struct i2c_client *i2c, int reg,
 		u8 data)

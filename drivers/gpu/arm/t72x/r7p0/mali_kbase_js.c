@@ -1933,63 +1933,63 @@ static void kbase_js_set_timeouts(struct kbase_device *kbdev)
 {
 	struct kbasep_js_device_data *js_data = &kbdev->js_data;
 
-	if (kbdev->js_scheduling_period_ns < 0)
+	if ((int)kbdev->js_scheduling_period_ns < 0)
 		js_data->scheduling_period_ns = DEFAULT_JS_SCHEDULING_PERIOD_NS;
-	else if (kbdev->js_scheduling_period_ns > 0)
+	else if ((int)kbdev->js_scheduling_period_ns > 0)
 		js_data->scheduling_period_ns = kbdev->js_scheduling_period_ns;
 
-	if (kbdev->js_soft_stop_ticks < 0)
+	if ((int)kbdev->js_soft_stop_ticks < 0)
 		js_data->soft_stop_ticks = DEFAULT_JS_SOFT_STOP_TICKS;
-	else if (kbdev->js_soft_stop_ticks > 0)
+	else if ((int)kbdev->js_soft_stop_ticks > 0)
 		js_data->soft_stop_ticks = kbdev->js_soft_stop_ticks;
 
-	if (kbdev->js_soft_stop_ticks_cl < 0)
+	if ((int)kbdev->js_soft_stop_ticks_cl < 0)
 		js_data->soft_stop_ticks_cl = DEFAULT_JS_SOFT_STOP_TICKS_CL;
-	else if (kbdev->js_soft_stop_ticks_cl > 0)
+	else if ((int)kbdev->js_soft_stop_ticks_cl > 0)
 		js_data->soft_stop_ticks_cl = kbdev->js_soft_stop_ticks_cl;
 
-	if (kbdev->js_hard_stop_ticks_ss < 0) {
+	if ((int)kbdev->js_hard_stop_ticks_ss < 0) {
 		if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8408))
 			js_data->hard_stop_ticks_ss =
 					DEFAULT_JS_HARD_STOP_TICKS_SS_8408;
 		else
 			js_data->hard_stop_ticks_ss =
 					DEFAULT_JS_HARD_STOP_TICKS_SS;
-	} else if (kbdev->js_hard_stop_ticks_ss > 0) {
+	} else if ((int)kbdev->js_hard_stop_ticks_ss > 0) {
 		js_data->hard_stop_ticks_ss = kbdev->js_hard_stop_ticks_ss;
 	}
 
-	if (kbdev->js_hard_stop_ticks_cl < 0)
+	if ((int)kbdev->js_hard_stop_ticks_cl < 0)
 		js_data->hard_stop_ticks_cl = DEFAULT_JS_HARD_STOP_TICKS_CL;
-	else if (kbdev->js_hard_stop_ticks_cl > 0)
+	else if ((int)kbdev->js_hard_stop_ticks_cl > 0)
 		js_data->hard_stop_ticks_cl = kbdev->js_hard_stop_ticks_cl;
 
-	if (kbdev->js_hard_stop_ticks_dumping < 0)
+	if ((int)kbdev->js_hard_stop_ticks_dumping < 0)
 		js_data->hard_stop_ticks_dumping =
 				DEFAULT_JS_HARD_STOP_TICKS_DUMPING;
-	else if (kbdev->js_hard_stop_ticks_dumping > 0)
+	else if ((int)kbdev->js_hard_stop_ticks_dumping > 0)
 		js_data->hard_stop_ticks_dumping =
 				kbdev->js_hard_stop_ticks_dumping;
 
-	if (kbdev->js_reset_ticks_ss < 0) {
+	if ((int)kbdev->js_reset_ticks_ss < 0) {
 		if (kbase_hw_has_issue(kbdev, BASE_HW_ISSUE_8408))
 			js_data->gpu_reset_ticks_ss =
 					DEFAULT_JS_RESET_TICKS_SS_8408;
 		else
 			js_data->gpu_reset_ticks_ss = DEFAULT_JS_RESET_TICKS_SS;
-	} else if (kbdev->js_reset_ticks_ss > 0) {
+	} else if ((int)kbdev->js_reset_ticks_ss > 0) {
 		js_data->gpu_reset_ticks_ss = kbdev->js_reset_ticks_ss;
 	}
 
-	if (kbdev->js_reset_ticks_cl < 0)
+	if ((int)kbdev->js_reset_ticks_cl < 0)
 		js_data->gpu_reset_ticks_cl = DEFAULT_JS_RESET_TICKS_CL;
-	else if (kbdev->js_reset_ticks_cl > 0)
+	else if ((int)kbdev->js_reset_ticks_cl > 0)
 		js_data->gpu_reset_ticks_cl = kbdev->js_reset_ticks_cl;
 
-	if (kbdev->js_reset_ticks_dumping < 0)
+	if ((int)kbdev->js_reset_ticks_dumping < 0)
 		js_data->gpu_reset_ticks_dumping =
 				DEFAULT_JS_RESET_TICKS_DUMPING;
-	else if (kbdev->js_reset_ticks_dumping > 0)
+	else if ((int)kbdev->js_reset_ticks_dumping > 0)
 		js_data->gpu_reset_ticks_dumping =
 				kbdev->js_reset_ticks_dumping;
 }

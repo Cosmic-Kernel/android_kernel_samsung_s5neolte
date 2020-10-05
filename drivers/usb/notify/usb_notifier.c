@@ -16,11 +16,11 @@
 #include <linux/of_device.h>
 #include <linux/of_gpio.h>
 #endif
-#ifdef CONFIG_MUIC_NOTIFIER
+#if defined(CONFIG_MUIC_NOTIFIER)
 #include <linux/muic/muic.h>
 #include <linux/muic/muic_notifier.h>
 #endif
-#ifdef CONFIG_VBUS_NOTIFIER
+#if defined(CONFIG_VBUS_NOTIFIER)
 #include <linux/vbus_notifier.h>
 #endif
 #include <linux/battery/sec_charging_common.h>
@@ -28,9 +28,11 @@
 
 struct usb_notifier_platform_data {
 	struct	notifier_block usb_nb;
+#if defined(CONFIG_VBUS_NOTIFIER)
 	struct	notifier_block vbus_nb;
+#endif
 	int	gpio_redriver_en;
-	int can_diable_usb;
+	int can_disable_usb;
 };
 
 #ifdef CONFIG_OF
@@ -48,9 +50,9 @@ static void of_get_usb_redriver_dt(struct device_node *np,
 
 	pr_info("%s, gpios_redriver_en %d\n", __func__, gpio);
 
-	pdata->can_diable_usb =
+	pdata->can_disable_usb =
 		!(of_property_read_bool(np, "samsung,unsupport-disable-usb"));
-	pr_info("%s, can_diable_usb %d\n", __func__, pdata->can_diable_usb);
+	pr_info("%s, can_disable_usb %d\n", __func__, pdata->can_disable_usb);
 	return;
 }
 
@@ -105,7 +107,7 @@ end:
 
 static void check_usb_id_state(int state)
 {
-#ifdef CONFIG_USB_DWC3_EXYNOS
+#if defined(CONFIG_USB_DWC3_EXYNOS)
 	struct device_node *np = NULL;
 	struct platform_device *pdev = NULL;
 
@@ -213,6 +215,14 @@ static int usb_handle_notification(struct notifier_block *nb,
 		else
 			pr_err("%s - ACTION Error!\n", __func__);
 		break;
+	case ATTACHED_DEV_USB_LANHUB_MUIC:
+		if (action == MUIC_NOTIFY_CMD_DETACH)
+			send_otg_notify(o_notify, NOTIFY_EVENT_LANHUB, 0);
+		else if (action == MUIC_NOTIFY_CMD_ATTACH)
+			send_otg_notify(o_notify, NOTIFY_EVENT_LANHUB, 1);
+		else
+			pr_err("%s - ACTION Error!\n", __func__);
+		break;
 	default:
 		break;
 	}
@@ -220,8 +230,7 @@ static int usb_handle_notification(struct notifier_block *nb,
 	return 0;
 }
 #endif
-
-#ifdef CONFIG_VBUS_NOTIFIER
+#if defined(CONFIG_VBUS_NOTIFIER)
 static int vbus_handle_notification(struct notifier_block *nb,
 		unsigned long cmd, void *data)
 {
@@ -363,8 +372,8 @@ static struct otg_notify dwc_lsi_notify = {
 
 static int usb_notifier_probe(struct platform_device *pdev)
 {
-	int ret = 0;
 	struct usb_notifier_platform_data *pdata = NULL;
+	int ret = 0;
 
 	if (pdev->dev.of_node) {
 		pdata = devm_kzalloc(&pdev->dev,
@@ -385,15 +394,15 @@ static int usb_notifier_probe(struct platform_device *pdev)
 		pdata = pdev->dev.platform_data;
 
 	dwc_lsi_notify.redriver_en_gpio = pdata->gpio_redriver_en;
-	dwc_lsi_notify.disable_control = pdata->can_diable_usb;
+	dwc_lsi_notify.disable_control = pdata->can_disable_usb;
 	set_otg_notify(&dwc_lsi_notify);
 	set_notify_data(&dwc_lsi_notify, pdata);
 
-#ifdef CONFIG_MUIC_NOTIFIER
+#if defined(CONFIG_MUIC_NOTIFIER)
 	muic_notifier_register(&pdata->usb_nb, usb_handle_notification,
 			       MUIC_NOTIFY_DEV_USB);
 #endif
-#ifdef CONFIG_VBUS_NOTIFIER
+#if defined(CONFIG_VBUS_NOTIFIER)
 	vbus_notifier_register(&pdata->vbus_nb, vbus_handle_notification,
 			       MUIC_NOTIFY_DEV_USB);
 #endif

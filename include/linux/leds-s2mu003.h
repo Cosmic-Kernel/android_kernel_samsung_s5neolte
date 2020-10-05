@@ -145,16 +145,6 @@ enum s2mu003_torch_timeout {
 	S2MU003_TORCH_TIMEOUT_MAX,
 };
 
-static u8 leds_cur_max[] = {
-	S2MU003_FLASH_OUT_I_900MA,
-	S2MU003_TORCH_OUT_I_400MA,
-};
-
-static u8 leds_time_max[] = {
-	S2MU003_FLASH_TIMEOUT_992MS,
-	S2MU003_TORCH_TIMEOUT_15728MS,
-};
-
 struct s2mu003_led {
 	const char *name;
 	int id;
@@ -173,5 +163,7 @@ struct s2mu003_fled_platform_data {
 	struct pinctrl_state *gpio_state_active;
 	struct pinctrl_state *gpio_state_suspend;
 };
+
+extern int s2mu003_led_forced_control(int value);
 
 #endif

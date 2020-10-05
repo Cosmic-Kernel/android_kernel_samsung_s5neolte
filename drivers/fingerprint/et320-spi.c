@@ -739,6 +739,9 @@ static long etspi_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		break;
 
 #endif
+	case FP_POWER_CONTROL_ET510:
+	case FP_IOCTL_RESERVED_01:
+		break;
 	default:
 		retval = -EFAULT;
 		break;

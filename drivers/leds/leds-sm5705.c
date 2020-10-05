@@ -382,6 +382,7 @@ static int sm5705_fled_turn_on_flash(struct sm5705_fled_info *sm5705_fled, int i
 			return ret;
 		}
 	}
+	sm5705_charger_oper_push_event(SM5705_CHARGER_OP_EVENT_TORCH, 0);
 	sm5705_charger_oper_push_event(SM5705_CHARGER_OP_EVENT_FLASH, 1);
 
 	dev_info(dev, "%s: FLED[%d] Flash turn-on done.\n", __func__, index);
@@ -447,14 +448,14 @@ int sm5705_fled_prepare_flash(unsigned char index)
 		return 0;
 	}
 
-	dev_info(g_sm5705_fled->dev, "%s: check - SM5705(rev.%d)\n",
-			__func__, __get_revision_number());
-
 	if (g_sm5705_fled == NULL) {
 		pr_err("sm5705-fled: %s: invalid g_sm5705_fled, maybe not registed fled \
 			device driver\n", __func__);
 		return -ENXIO;
 	}
+
+	dev_info(g_sm5705_fled->dev, "%s: check - SM5705(rev.%d)\n",
+			__func__, __get_revision_number());
 
 	if (g_sm5705_fled->pdata->led[index].used_gpio == 0) {
 		pr_err("sm5705-fled: %s: can't used external GPIO control, check device tree\n",
@@ -506,6 +507,11 @@ EXPORT_SYMBOL(sm5705_fled_prepare_flash);
 
 int sm5705_fled_torch_on(unsigned char index)
 {
+	if (assistive_light == true) {
+		pr_info("%s : assistive_light is enabled \n", __func__);
+		return 0;
+	}
+
 	dev_info(g_sm5705_fled->dev, "%s: Torch - ON : E\n", __func__);
 
 	if (fimc_is_activated != 1) {
@@ -543,6 +549,11 @@ EXPORT_SYMBOL(sm5705_fled_torch_on);
 
 int sm5705_fled_flash_on(unsigned char index)
 {
+	if (assistive_light == true) {
+		pr_info("%s : assistive_light is enabled \n", __func__);
+		return 0;
+	}
+
 	dev_info(g_sm5705_fled->dev, "%s: Flash - ON : E\n", __func__);
 
 	sm5705_fled_lock(g_sm5705_fled);
@@ -586,6 +597,11 @@ int sm5705_fled_close_flash(unsigned char index)
 {
 	if (fimc_is_activated == 0) {
 		/* skip to overlapping function calls */
+		return 0;
+	}
+
+	if (assistive_light == true) {
+		pr_info("%s : assistive_light is enabled \n", __func__);
 		return 0;
 	}
 

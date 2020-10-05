@@ -121,6 +121,13 @@ config SENSORS_CM36672P
 	default n
 	help
 	  This option enables proximity sensor using CM36672P driver.
+	  
+config SENSORS_CM36686
+	depends on I2C
+	tristate "CM36686 driver"
+	default n
+	help
+	  This option enables proximity & light sensors using CM36686 driver.
 
 config SENSORS_TCS3490
 	depends on I2C

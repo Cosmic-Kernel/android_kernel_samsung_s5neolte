@@ -104,6 +104,9 @@ struct sec_spi_info {
 #define FP_SET_WAKE_UP_SIGNAL				0x17
 #endif
 
+#define FP_POWER_CONTROL_ET510				0x18
+#define FP_IOCTL_RESERVED_01				0x19
+
 #define FP_EEPROM_WREN					0x90
 #define FP_EEPROM_WRDI					0x91
 #define FP_EEPROM_RDSR					0x92

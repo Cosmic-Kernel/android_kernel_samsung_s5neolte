@@ -254,6 +254,6 @@ config BT_BCM43455
 	bool "Enable BCM43455 driver"
 	default n
 	help
-	  Adds BCM43455 RFKILL driver for Broadcom BCM43455 chipset for exynos54xx.
+	  Adds BCM43455 RFKILL driver for Broadcom BCM43455 chipset for exynos.
 	  default is n.
 endmenu

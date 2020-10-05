@@ -33,12 +33,6 @@ config BATTERY_SWELLING_SELF_DISCHARGING
 	help
 	 Say Y to include support for prevent battery swelling with self discharging
 
-config SW_SELF_DISCHARGING
-	bool "enable sw_self_discharging"
-	default n
-	help
-	  Say Y to enable CONFIG_SW_SELF_DISCHARGING
-
 config INBATTERY
 	bool "is inbattery or not"
 	default n
@@ -403,14 +397,6 @@ config CHARGER_MAX77888
 	 flash driver.
 	 You have to define MFD_MAX77888
 
-config CHARGER_S2MU003
-	tristate "S2MU003 charger support"
-	depends on (MFD_S2MU003) && I2C
-	help
-	 Say Y here to enable support for the S2MU003 charger
-	 S2MU003 incluse pmic, led driver.
-	 You have to define MFD_S2MU003
-
 config CHARGER_SM5703
 	tristate "SM5703 battery charger support"
 	depends on MFD_SM5703 && I2C
@@ -454,6 +440,14 @@ config CHARGER_S2MU003
          Say Y here to enable support for the S2MU003 charger
          S2MU003 incluse pmic, led driver.
          You have to define MFD_S2MU003
+
+config CHARGER_S2MU003_DISABLE_SUPPORT_TOP_OFF_TMR
+	bool "S2MU003 disable support for top-off timer"
+	default n
+	depends on CHARGER_S2MU003
+	help
+	 Say Y here to disable support for top-off timer in S2MU003 charger IC
+	 driver.
 
 config CHARGER_S2MU005
 	tristate "S2MU005 charger support"
@@ -556,6 +550,11 @@ config STORE_MODE
        default n
        help
 	Say Y to enable CONFIG_STORE_MODE
+
+config A3XE
+	bool "config for A3XE"
+	help
+	 Say y to include config for A3XE
 
 config LOWTEMP_VBAT_DROP_PREVENT
 	tristate "Prevent vbat drop when low temperature"

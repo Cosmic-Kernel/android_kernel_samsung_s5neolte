@@ -30,6 +30,7 @@
 extern struct class *camera_class;
 struct device *flash_dev;
 bool assistive_light = false;
+bool front_torch = false;
 struct s2mu005_led_data * g_led_datas[S2MU005_LED_MAX];
 struct device *g_s2mu005_dev;
 
@@ -70,6 +71,9 @@ struct s2mu005_led_data {
 	unsigned int movie_brightness;
 	unsigned int torch_brightness;
 	unsigned int factory_brightness;
+#if defined(CONFIG_LEDS_SUPPORT_FRONT_FLASH)
+	unsigned int front_brightness;
+#endif
 };
 
 u8 CH_FLASH_TORCH_EN = S2MU005_REG_FLED_RSVD;
@@ -132,7 +136,7 @@ static int ta_notification(struct notifier_block *nb,
 				goto gpio_free_data;
 			}
 		}
-		if (gpio_get_value(led_data->torch_pin)) {
+		if (gpio_get_value(led_data->torch_pin) && (assistive_light == true)) {
 			gpio_direction_output(led_data->torch_pin, 0);
 			gpio_direction_output(led_data->torch_pin, 1);
 			goto gpio_free_data;
@@ -229,6 +233,7 @@ static void led_set(struct s2mu005_led_data *led_data)
 	pr_info("%s start led_set\n", __func__);
 
 	if (led_data->test_brightness == LED_OFF) {
+		pr_info("%s led off\n", __func__);
 		ret = s2mu005_update_reg(led_data->i2c, reg,
 				led_data->data->brightness, mask);
 		if (ret < 0)
@@ -293,7 +298,6 @@ static void led_set(struct s2mu005_led_data *led_data)
 
 		gpio_direction_output(gpio_pin, 1);
 		goto gpio_free_data;
-
 #endif
 	}
 #ifdef CONFIG_S2MU005_LEDS_I2C
@@ -502,24 +506,49 @@ int s2mu005_led_mode_ctrl(int state)
 #ifdef CONFIG_LEDS_SUPPORT_FRONT_FLASH
 int s2mu005_led_select_ctrl(int ch)
 {
-	struct s2mu005_led_data *led_data = g_led_datas[S2MU005_FLASH_LED];
+	struct s2mu005_led_data *led_data = g_led_datas[S2MU005_TORCH_LED];
+	struct led_classdev *led_cdev = &led_data->cdev;
 	int value = 0;
 
-	pr_info("%s : selected %s\n", __func__, ch == S2MU005_FLED_CH1 ? "FLED1" : "FLED2");
-
-	if (assistive_light == true) {
-		pr_info("%s : assistive_light is enabled \n", __func__);
-		return 0;
-	}
+	pr_info("%s : selected(%d) %s\n", __func__, ch, ch == S2MU005_FLED_CH1 ? "FLED1" :
+									(ch == S2MU005_FLED_CH2 ?  "FLED2" : "OFF"));
 
 	mutex_lock(&led_data->lock);
 
-	if (ch == S2MU005_FLED_CH1) {
-		value = S2MU005_CH1_TORCH_ON_GPIO | S2MU005_CH1_FLASH_ON_GPIO;
+	if (ch == S2MU005_FLED_OFF) {
+		front_torch = false;
+		if (assistive_light == true) {
+			pr_info("%s : [LED OFF] assistive_light is enabled \n", __func__);
+			value = S2MU005_CH1_TORCH_ON_GPIO;
+			s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value);
+			s2mu005_led_set(led_cdev, led_data->torch_brightness);
+		} else {
+			value = 0;
+			s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value); 
+			s2mu005_led_set(led_cdev, LED_OFF);
+		}
+	} else if (ch == S2MU005_FLED_CH1) { /* Rear Flash */
+		if (assistive_light == true) {
+			pr_info("%s : [LED CH1] assistive_light is enabled \n", __func__);
+		} else {
+			value = S2MU005_CH1_TORCH_ON_GPIO | S2MU005_CH1_FLASH_ON_GPIO;
+			s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value);
+			/* brightness set - Rear pre-flash*/
+			s2mu005_update_reg(led_data->i2c, S2MU005_REG_FLED_CH1_CTRL1,
+				led_data->preflash_brightness, S2MU005_TORCH_IOUT_MASK);
+		}
+	} else if (ch == S2MU005_FLED_CH2) { /* Front Flash */
+		if (assistive_light == true) {
+			pr_info("%s : [LED CH2] assistive_light is enabled \n", __func__);
+			value = S2MU005_CH1_TORCH_ON_GPIO | S2MU005_CH2_TORCH_ON_GPIO;
+		} else {
+			value = S2MU005_CH2_TORCH_ON_GPIO;
+		}
 		s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value);
-	} else if (ch == S2MU005_FLED_CH2) {
-		value = S2MU005_CH2_TORCH_ON_GPIO;
-		s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value);
+		/* brightness set - front torch*/
+		s2mu005_update_reg(led_data->i2c, S2MU005_REG_FLED_CH2_CTRL1,
+			led_data->front_brightness, S2MU005_TORCH_IOUT_MASK);
+		front_torch = true;
 	} else {
 		value = S2MU005_CH1_FLASH_ON_GPIO | S2MU005_CH1_TORCH_ON_GPIO
 			| S2MU005_CH2_TORCH_ON_GPIO;
@@ -558,15 +587,16 @@ static ssize_t rear_flash_store(struct device *dev,
 {
 	struct s2mu005_led_data *led_data = g_led_datas[S2MU005_TORCH_LED];
 	struct led_classdev *led_cdev = &led_data->cdev;
+	int mode = 0;
 	int value = 0;
 	int brightness = 0;
 	u32 temp;
 
-	if ((buf == NULL) || kstrtouint(buf, 10, &value)) {
+	if ((buf == NULL) || kstrtouint(buf, 10, &mode)) {
 		return -1;
 	}
 
-	pr_info("[LED]%s , value:%d\n", __func__, value);
+	pr_info("[LED]%s , mode:%d\n", __func__, mode);
 	mutex_lock(&led_data->lock);
 
 	if (led_data->data->id == S2MU005_FLASH_LED) {
@@ -574,23 +604,41 @@ static ssize_t rear_flash_store(struct device *dev,
 		goto err;
 	}
 
-	if (value == 0) {
+	if (mode == 0) {
 		/* Turn off Torch */
-		brightness = LED_OFF;
 		assistive_light = false;
-	} else if (value == 1) {
+
+		if (front_torch == true) {
+			value = S2MU005_CH2_TORCH_ON_GPIO;
+		} else {
+			value = S2MU005_FLASH_TORCH_OFF;
+			/* brightness set - Rear pre-flash*/
+			s2mu005_update_reg(led_data->i2c, S2MU005_REG_FLED_CH1_CTRL1,
+				led_data->preflash_brightness, S2MU005_TORCH_IOUT_MASK);
+			brightness = LED_OFF;
+		}
+	} else if (mode == 1) {
 		/* Turn on Torch */
-		brightness = led_data->torch_brightness;
 		assistive_light = true;
-	} else if (value == 100) {
+
+		if (front_torch == true) {
+			brightness = led_data->front_brightness;
+			value = S2MU005_CH1_TORCH_ON_GPIO | S2MU005_CH2_TORCH_ON_GPIO;
+		} else {
+			brightness = led_data->torch_brightness;
+			value = S2MU005_CH1_TORCH_ON_GPIO;
+		}
+	} else if (mode == 100) {
 		/* Factory mode Turn on Torch */
 		brightness = led_data->factory_brightness;
-	} else if (1001 <= value && value <= 1010) {
+		value = S2MU005_CH1_TORCH_ON_GPIO;
+	} else if (1001 <= mode && mode <= 1010) {
 		/* Turn on Torch Step 25mA ~ 250mA */
-		temp = (value - 1000) * 25;
+		temp = (mode - 1000) * 25;
 		brightness= S2MU005_TORCH_BRIGHTNESS(temp);
+		value = S2MU005_CH1_TORCH_ON_GPIO;
 	} else {
-		pr_info("[LED]%s , Invalid value:%d\n", __func__, value);
+		pr_info("[LED]%s , Invalid value:%d\n", __func__, mode);
 		goto err;
 	}
 
@@ -601,8 +649,6 @@ static ssize_t rear_flash_store(struct device *dev,
 
 #ifdef CONFIG_S2MU005_LEDS_I2C
 	value = S2MU005_FLASH_TORCH_OFF;
-#else
-	value = S2MU005_CH1_TORCH_ON_GPIO | S2MU005_CH1_FLASH_ON_GPIO;
 #endif
 	s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value);
 	s2mu005_led_set(led_cdev, brightness);
@@ -648,14 +694,15 @@ static ssize_t front_flash_store(struct device *dev,
 {
 	struct s2mu005_led_data *led_data = g_led_datas[S2MU005_TORCH_LED];
 	struct led_classdev *led_cdev = &led_data->cdev;
+	int mode = 0;
 	int value = 0;
 	int brightness = 0;
 
-	if ((buf == NULL) || kstrtouint(buf, 10, &value)) {
+	if ((buf == NULL) || kstrtouint(buf, 10, &mode)) {
 		return -1;
 	}
 
-	pr_info("[LED]%s , value:%d\n", __func__, value);
+	pr_info("[LED]%s , value:%d\n", __func__, mode);
 	mutex_lock(&led_data->lock);
 
 	if (led_data->data->id == S2MU005_FLASH_LED) {
@@ -663,19 +710,22 @@ static ssize_t front_flash_store(struct device *dev,
 		goto err;
 	}
 
-	if (value == 0) {
+	if (mode == 0) {
 		/* Turn off Torch */
+		value = S2MU005_FLASH_TORCH_OFF;
 		brightness = LED_OFF;
 		assistive_light = false;
-	} else if (value == 1) {
+	} else if (mode == 1) {
 		/* Turn on Torch */
-		brightness = led_data->torch_brightness;
+		value = S2MU005_CH2_TORCH_ON_GPIO;
+		brightness = led_data->front_brightness;
 		assistive_light = true;
-	} else if (value == 100) {
+	} else if (mode == 100) {
 		/* Factory mode Turn on Torch */
+		value = S2MU005_CH2_TORCH_ON_GPIO;
 		brightness = led_data->factory_brightness;
 	} else {
-		pr_info("[LED]%s , Invalid value:%d\n", __func__, value);
+		pr_info("[LED]%s , Invalid value:%d\n", __func__, mode);
 		goto err;
 	}
 
@@ -686,8 +736,6 @@ static ssize_t front_flash_store(struct device *dev,
 
 #ifdef CONFIG_S2MU005_LEDS_I2C
 	value = S2MU005_FLASH_TORCH_OFF;
-#else
-	value = S2MU005_CH2_TORCH_ON_GPIO;
 #endif
 	s2mu005_write_reg(led_data->i2c, CH_FLASH_TORCH_EN, value);
 	s2mu005_led_set(led_cdev, brightness);
@@ -770,6 +818,14 @@ static int s2mu005_led_dt_parse_pdata(struct device *dev,
 		goto dt_err;
 	pdata->factory_brightness = S2MU005_TORCH_BRIGHTNESS(temp);
 	dev_info(dev, "factory_current = <%d>, brightness = %x\n", temp, pdata->factory_brightness);
+
+#if defined(CONFIG_LEDS_SUPPORT_FRONT_FLASH)
+	ret = of_property_read_u32(np, "front_torch_current", &temp);
+	if (ret < 0)
+		goto dt_err;
+	pdata->front_brightness = S2MU005_TORCH_BRIGHTNESS(temp);
+	dev_info(dev, "front_torch_current = <%d>, brightness = %x\n", temp, pdata->front_brightness);
+#endif
 
 	pdata->num_leds = of_get_child_count(np);
 
@@ -988,6 +1044,9 @@ static int s2mu005_led_probe(struct platform_device *pdev)
 		led_data->movie_brightness = pdata->movie_brightness;
 		led_data->torch_brightness = pdata->torch_brightness;
 		led_data->factory_brightness = pdata->factory_brightness;
+#if defined(CONFIG_LEDS_SUPPORT_FRONT_FLASH)
+		led_data->front_brightness = pdata->front_brightness;
+#endif
 
 		ret = s2mu005_read_reg(led_data->i2c, 0x73, &temp);	/* EVT0 0x73[3:0] == 0x0 */
 		if (ret < 0)

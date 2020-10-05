@@ -20,6 +20,7 @@
 #include <linux/irq.h>
 #include <linux/of_gpio.h>
 #include <linux/time.h>
+#include <linux/vmalloc.h>
 
 #include "sec_ts.h"
 
@@ -389,45 +390,34 @@ static  int sec_ts_memoryread(struct sec_ts_data *ts,u32 mem_addr, u8* mem_data,
 
 static int sec_ts_chunk_update(struct sec_ts_data *ts, u32 addr, u32 size, u8* data)
 {
-	u32 fw_size, fw_size4;
+	u32 fw_size;
 	u32 write_size;
-	u8* mem_data;
 	u8* mem_rb;
 	int ret = 0;
 
 	fw_size = size;
-	fw_size4 = (fw_size + 3) & ~3;     /* 4-bytes align */
 
-	mem_data = (u8 *)kzalloc(sizeof(u8)*fw_size4, GFP_KERNEL);
-	if (!mem_data) {
-		tsp_debug_err(true, &ts->client->dev, "%s kzalloc failed\n", __func__);
-		ret = -1;
-		goto err_mem_data;;
-	}
-
-	memcpy(mem_data, data, sizeof(u8) * fw_size);
-
-	write_size = sec_ts_flashwrite(ts, addr, mem_data, fw_size4);
-	if (write_size != fw_size4) {
+	write_size = sec_ts_flashwrite(ts, addr, data, fw_size);
+	if (write_size != fw_size) {
 		tsp_debug_err(true, &ts->client->dev, "%s fw write failed\n", __func__);
 		ret = -1;
 		goto err_write_fail;
 	}
 
-	mem_rb = (u8 *)kzalloc(fw_size4, GFP_KERNEL);
+	mem_rb = (u8 *)vzalloc(fw_size);
 	if (!mem_rb) {
 		tsp_debug_err(true, &ts->client->dev, "%s kzalloc failed\n", __func__);
 		ret = -1;
 		goto err_write_fail;
 	}
 
-	if (sec_ts_memoryread(ts, addr, mem_rb, fw_size4) >= 0) {
+	if (sec_ts_memoryread(ts, addr, mem_rb, fw_size) >= 0) {
 		u32 ii;
-		for (ii = 0; ii < fw_size4; ii++) {
-			if (mem_data[ii] != mem_rb[ii])
+		for (ii = 0; ii < fw_size; ii++) {
+			if (data[ii] != mem_rb[ii])
 				break;
 		}
-		if (fw_size4 != ii) {
+		if (fw_size != ii) {
 			tsp_debug_err(true, &ts->client->dev, "%s fw verify fail\n", __func__);
 			ret = -1;
 			goto out;
@@ -438,10 +428,8 @@ static int sec_ts_chunk_update(struct sec_ts_data *ts, u32 addr, u32 size, u8* d
 	}
 
 out:
-	kfree(mem_rb);
+	vfree(mem_rb);
 err_write_fail:
-	kfree(mem_data);
-err_mem_data:
 	sec_ts_delay(10);
 	return ret;
 }

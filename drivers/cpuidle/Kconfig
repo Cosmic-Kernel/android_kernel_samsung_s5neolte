@@ -55,6 +55,13 @@ config CPU_IDLE_EXYNOS
 	help
 	  Select this to enable cpuidle on Exynos processors.
 
+config CPU_IDLE_EXYNOS_C2_DISABLE
+	bool "Disable C2"
+	depends on CPU_IDLE_EXYNOS
+	default n
+	help
+	  Select this to disable C2. Existing C2 condition will use C1.
+
 menu "ARM64 CPU Idle Drivers"
 depends on ARM64
 source "drivers/cpuidle/Kconfig.arm64"

@@ -1,7 +1,7 @@
 /*
  * Broadcom Dongle Host Driver (DHD), common DHD core.
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_common.c 609714 2016-01-05 07:50:25Z $
+ * $Id: dhd_common.c 700407 2017-05-19 03:32:21Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -344,15 +344,16 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifindex, wl_ioctl_t *ioc, void *buf, int le
 	if (dhd_os_proto_block(dhd_pub))
 	{
 #ifdef DHD_LOG_DUMP
-		int slen, i, val, rem;
-		long int lval;
+		int slen, i, val, rem, lval, min_len;
 		char *pval, *pos, *msg;
 		char tmp[64];
 
 		/* WLC_GET_VAR */
 		if (ioc->cmd == WLC_GET_VAR) {
+			min_len = MIN(sizeof(tmp) - 1, strlen(buf));
 			memset(tmp, 0, sizeof(tmp));
-			bcopy(ioc->buf, tmp, strlen(ioc->buf) + 1);
+			bcopy(buf, tmp, min_len);
+			tmp[min_len] = '\0';
 		}
 #endif /* DHD_LOG_DUMP */
 		ret = dhd_prot_ioctl(dhd_pub, ifindex, ioc, buf, len);
@@ -376,36 +377,40 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifindex, wl_ioctl_t *ioc, void *buf, int le
 #ifdef DHD_LOG_DUMP
 		if (ioc->cmd == WLC_GET_VAR || ioc->cmd == WLC_SET_VAR) {
 			lval = 0;
-			slen = strlen(ioc->buf) + 1;
-			msg = (char*)ioc->buf;
-			if (ioc->cmd == WLC_GET_VAR) {
-				bcopy(msg, &lval, sizeof(long int));
-				msg = tmp;
-			} else {
-				bcopy((msg + slen), &lval, sizeof(long int));
+			slen = strlen(buf) + 1;
+			msg = (char *)buf;
+			if (len >= slen + sizeof(lval)) {
+				if (ioc->cmd == WLC_GET_VAR) {
+					msg = tmp;
+					lval = *(int *)buf;
+				} else {
+					min_len = MIN(ioc->len - slen, sizeof(int));
+					bcopy((msg + slen), &lval, min_len);
+				}
 			}
-			DHD_ERROR_EX(("%s: cmd: %d, msg: %s, val: 0x%lx, len: %d, set: %d\n",
+			DHD_ERROR_MEM(("%s: cmd: %d, msg: %s, val: 0x%x, len: %d, set: %d\n",
 				ioc->cmd == WLC_GET_VAR ? "WLC_GET_VAR" : "WLC_SET_VAR",
 				ioc->cmd, msg, lval, ioc->len, ioc->set));
 		} else {
 			slen = ioc->len;
-			if (ioc->buf != NULL) {
-				val = *(int*)ioc->buf;
-				pval = (char*)ioc->buf;
+			if (buf != NULL) {
+				val = *(int *)buf;
+				pval = (char *)buf;
 				pos = tmp;
 				rem = sizeof(tmp);
 				memset(tmp, 0, sizeof(tmp));
 				for (i = 0; i < slen; i++) {
-					pos += snprintf(pos, rem, "%02x ", pval[i]);
-					rem = sizeof(tmp) - (int)(pos - tmp);
-					if (rem <= 0) {
+					if (rem <= 3) {
+						/* At least 2 byte required + 1 byte(NULL) */
 						break;
 					}
+					pos += snprintf(pos, rem, "%02x ", pval[i]);
+					rem = sizeof(tmp) - (int)(pos - tmp);
 				}
-				DHD_ERROR_EX(("WLC_IOCTL: cmd: %d, val: %d (%s), len: %d, "
+				DHD_ERROR_MEM(("WLC_IOCTL: cmd: %d, val: %d (%s), len: %d, "
 					"set: %d\n", ioc->cmd, val, tmp, ioc->len, ioc->set));
 			} else {
-				DHD_ERROR_EX(("WLC_IOCTL: cmd: %d, buf is NULL\n", ioc->cmd));
+				DHD_ERROR_MEM(("WLC_IOCTL: cmd: %d, buf is NULL\n", ioc->cmd));
 			}
 		}
 #endif /* DHD_LOG_DUMP */
@@ -415,10 +420,10 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifindex, wl_ioctl_t *ioc, void *buf, int le
 		if (ret < 0) {
 			if (ioc->cmd == WLC_GET_VAR)
 				DHD_ERROR(("%s: WLC_GET_VAR: %s, ret = %d\n",
-					__FUNCTION__, (char *)ioc->buf, ret));
+					__FUNCTION__, (char *)buf, ret));
 			else if (ioc->cmd == WLC_SET_VAR)
 				DHD_ERROR(("%s: WLC_SET_VAR: %s, ret = %d\n",
-					__FUNCTION__, (char *)ioc->buf, ret));
+					__FUNCTION__, (char *)buf, ret));
 			else
 				DHD_ERROR(("%s: WLC_IOCTL: cmd: %d, ret = %d\n",
 					__FUNCTION__, ioc->cmd, ret));
@@ -1664,18 +1669,51 @@ fail:
 		MFREE(dhd->osh, arg_org, strlen(arg) + 1);
 }
 
+/* Packet filter section: extended filters have named offsets, add table here */
+typedef struct {
+	char *name;
+	uint16 base;
+} wl_pfbase_t;
+
+static wl_pfbase_t basenames[] = { WL_PKT_FILTER_BASE_NAMES };
+
+static int
+wl_pkt_filter_base_parse(char *name)
+{
+	uint i;
+	char *bname, *uname;
+
+	for (i = 0; i < ARRAYSIZE(basenames); i++) {
+		bname = basenames[i].name;
+		for (uname = name; *uname; bname++, uname++) {
+			if (*bname != bcm_toupper(*uname)) {
+				break;
+			}
+		}
+		if (!*uname && !*bname) {
+			break;
+		}
+	}
+
+	if (i < ARRAYSIZE(basenames)) {
+		return basenames[i].base;
+	} else {
+		return -1;
+	}
+}
+
 void
 dhd_pktfilter_offload_set(dhd_pub_t * dhd, char *arg)
 {
-	const char 			*str;
+	const char		*str;
 	wl_pkt_filter_t		pkt_filter;
 	wl_pkt_filter_t		*pkt_filterp;
 	int					buf_len;
 	int					str_len;
-	int 				rc;
+	int			rc;
 	uint32				mask_size;
 	uint32				pattern_size;
-	char				*argv[8], * buf = 0;
+	char				*argv[16], * buf = 0;
 	int					i = 0;
 	char				*arg_save = 0, *arg_org = 0;
 #define BUF_SIZE		2048
@@ -1739,50 +1777,170 @@ dhd_pktfilter_offload_set(dhd_pub_t * dhd, char *arg)
 	/* Parse filter type. */
 	pkt_filter.type = htod32(strtoul(argv[i], NULL, 0));
 
-	if (argv[++i] == NULL) {
-		DHD_ERROR(("Offset not provided\n"));
+	if ((pkt_filter.type == 0) || (pkt_filter.type == 1)) {
+		if (argv[++i] == NULL) {
+			DHD_ERROR(("Offset not provided\n"));
+			goto fail;
+		}
+
+		/* Parse pattern filter offset. */
+		pkt_filter.u.pattern.offset = htod32(strtoul(argv[i], NULL, 0));
+
+		if (argv[++i] == NULL) {
+			DHD_ERROR(("Bitmask not provided\n"));
+		    goto fail;
+		}
+
+		/* Parse pattern filter mask. */
+		mask_size =
+			htod32(wl_pattern_atoh(argv[i],
+			(char *) pkt_filterp->u.pattern.mask_and_pattern));
+
+		if (argv[++i] == NULL) {
+			DHD_ERROR(("Pattern not provided\n"));
+			goto fail;
+		}
+
+		/* Parse pattern filter pattern. */
+		pattern_size =
+			htod32(wl_pattern_atoh(argv[i],
+			(char *) &pkt_filterp->u.pattern.mask_and_pattern[mask_size]));
+
+		if (mask_size != pattern_size) {
+			DHD_ERROR(("Mask and pattern not the same size\n"));
+			goto fail;
+		}
+
+		pkt_filter.u.pattern.size_bytes = mask_size;
+		buf_len += WL_PKT_FILTER_FIXED_LEN;
+		buf_len += (WL_PKT_FILTER_PATTERN_FIXED_LEN + 2 * mask_size);
+
+		/* Keep-alive attributes are set in local	variable (keep_alive_pkt), and
+		 ** then memcpy'ed into buffer (keep_alive_pktp) since there is no
+		 ** guarantee that the buffer is properly aligned.
+		 */
+		memcpy((char *)pkt_filterp,
+			&pkt_filter,
+			WL_PKT_FILTER_FIXED_LEN + WL_PKT_FILTER_PATTERN_FIXED_LEN);
+	} else if ((pkt_filter.type == 2) || (pkt_filter.type == 6)) {
+		int list_cnt = 0;
+		char *endptr = '\0';
+		wl_pkt_filter_pattern_listel_t *pf_el = &pkt_filterp->u.patlist.patterns[0];
+
+		while (argv[++i] != NULL) {
+			/* Parse pattern filter base and offset. */
+			if (bcm_isdigit(*argv[i])) {
+				/* Numeric base */
+				rc = strtoul(argv[i], &endptr, 0);
+			} else {
+				endptr = strchr(argv[i], ':');
+				if (endptr) {
+					*endptr = '\0';
+					rc = wl_pkt_filter_base_parse(argv[i]);
+					if (rc == -1) {
+						printf("Invalid base %s\n", argv[i]);
+						goto fail;
+					}
+					*endptr = ':';
+				} else {
+					printf("Invalid [base:]offset format: %s\n", argv[i]);
+					goto fail;
+				}
+			}
+
+			if (*endptr == ':') {
+				pkt_filter.u.patlist.patterns[0].base_offs = htod16(rc);
+				rc = strtoul(endptr + 1, &endptr, 0);
+			} else {
+				/* Must have had a numeric offset only */
+				pkt_filter.u.patlist.patterns[0].base_offs = htod16(0);
+			}
+
+			if (*endptr) {
+				printf("Invalid [base:]offset format: %s\n", argv[i]);
+				goto fail;
+			}
+			if (rc > 0x0000FFFF) {
+				printf("Offset too large\n");
+				goto fail;
+			}
+			pkt_filter.u.patlist.patterns[0].rel_offs = htod16(rc);
+
+			/* Clear match_flag (may be set in parsing which follows) */
+			pkt_filter.u.patlist.patterns[0].match_flags = htod16(0);
+
+			/* Parse pattern filter mask and pattern directly into ioctl buffer */
+			if (argv[++i] == NULL) {
+				printf("Bitmask not provided\n");
+				goto fail;
+			}
+			rc = wl_pattern_atoh(argv[i], (char*)pf_el->mask_and_data);
+			if (rc == -1) {
+				printf("Rejecting: %s\n", argv[i]);
+				goto fail;
+			}
+			mask_size = htod16(rc);
+
+			if (argv[++i] == NULL) {
+				printf("Pattern not provided\n");
+				goto fail;
+			}
+
+			if (*argv[i] == '!') {
+				pkt_filter.u.patlist.patterns[0].match_flags =
+					htod16(WL_PKT_FILTER_MFLAG_NEG);
+				(argv[i])++;
+			}
+			if (argv[i] == '\0') {
+				printf("Pattern not provided\n");
+				goto fail;
+			}
+			rc = wl_pattern_atoh(argv[i], (char*)&pf_el->mask_and_data[rc]);
+			if (rc == -1) {
+				printf("Rejecting: %s\n", argv[i]);
+				goto fail;
+			}
+			pattern_size = htod16(rc);
+
+			if (mask_size != pattern_size) {
+				printf("Mask and pattern not the same size\n");
+				goto fail;
+			}
+
+			pkt_filter.u.patlist.patterns[0].size_bytes = mask_size;
+
+			/* Account for the size of this pattern element */
+			buf_len += WL_PKT_FILTER_PATTERN_LISTEL_FIXED_LEN + 2 * rc;
+
+			/* And the pattern element fields that were put in a local for
+			 * alignment purposes now get copied to the ioctl buffer.
+			 */
+			memcpy((char*)pf_el, &pkt_filter.u.patlist.patterns[0],
+				WL_PKT_FILTER_PATTERN_FIXED_LEN);
+
+			/* Move to next element location in ioctl buffer */
+			pf_el = (wl_pkt_filter_pattern_listel_t*)
+				((uint8*)pf_el + WL_PKT_FILTER_PATTERN_LISTEL_FIXED_LEN + 2 * rc);
+
+			/* Count list element */
+			list_cnt++;
+		}
+
+		/* Account for initial fixed size, and copy initial fixed fields */
+		buf_len += WL_PKT_FILTER_FIXED_LEN + WL_PKT_FILTER_PATTERN_LIST_FIXED_LEN;
+
+		/* Update list count and total size */
+		pkt_filter.u.patlist.list_cnt = list_cnt;
+		pkt_filter.u.patlist.PAD1[0] = 0;
+		pkt_filter.u.patlist.totsize = buf + buf_len - (char*)pkt_filterp;
+		pkt_filter.u.patlist.totsize -= WL_PKT_FILTER_FIXED_LEN;
+
+		memcpy((char *)pkt_filterp, &pkt_filter,
+			WL_PKT_FILTER_FIXED_LEN + WL_PKT_FILTER_PATTERN_LIST_FIXED_LEN);
+	} else {
+		DHD_ERROR(("Invalid filter type %d\n", pkt_filter.type));
 		goto fail;
 	}
-
-	/* Parse pattern filter offset. */
-	pkt_filter.u.pattern.offset = htod32(strtoul(argv[i], NULL, 0));
-
-	if (argv[++i] == NULL) {
-		DHD_ERROR(("Bitmask not provided\n"));
-		goto fail;
-	}
-
-	/* Parse pattern filter mask. */
-	mask_size =
-		htod32(wl_pattern_atoh(argv[i], (char *) pkt_filterp->u.pattern.mask_and_pattern));
-
-	if (argv[++i] == NULL) {
-		DHD_ERROR(("Pattern not provided\n"));
-		goto fail;
-	}
-
-	/* Parse pattern filter pattern. */
-	pattern_size =
-		htod32(wl_pattern_atoh(argv[i],
-	         (char *) &pkt_filterp->u.pattern.mask_and_pattern[mask_size]));
-
-	if (mask_size != pattern_size) {
-		DHD_ERROR(("Mask and pattern not the same size\n"));
-		goto fail;
-	}
-
-	pkt_filter.u.pattern.size_bytes = mask_size;
-	buf_len += WL_PKT_FILTER_FIXED_LEN;
-	buf_len += (WL_PKT_FILTER_PATTERN_FIXED_LEN + 2 * mask_size);
-
-	/* Keep-alive attributes are set in local	variable (keep_alive_pkt), and
-	** then memcpy'ed into buffer (keep_alive_pktp) since there is no
-	** guarantee that the buffer is properly aligned.
-	*/
-	memcpy((char *)pkt_filterp,
-	       &pkt_filter,
-	       WL_PKT_FILTER_FIXED_LEN + WL_PKT_FILTER_PATTERN_FIXED_LEN);
-
 	rc = dhd_wl_ioctl_cmd(dhd, WLC_SET_VAR, buf, buf_len, TRUE, 0);
 	rc = rc >= 0 ? 0 : rc;
 
@@ -2274,7 +2432,6 @@ bool dhd_is_associated(dhd_pub_t *dhd, uint8 ifidx, int *retval)
 	return TRUE;
 }
 
-
 /* Function to estimate possible DTIM_SKIP value */
 int
 dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd)
@@ -2283,9 +2440,7 @@ dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd)
 	int ret = -1;
 	int dtim_period = 0;
 	int ap_beacon = 0;
-#ifndef ENABLE_MAX_DTIM_IN_SUSPEND
 	int allowed_skip_dtim_cnt = 0;
-#endif /* !ENABLE_MAX_DTIM_IN_SUSPEND */
 	/* Check if associated */
 	if (dhd_is_associated(dhd, 0, NULL) == FALSE) {
 		DHD_TRACE(("%s NOT assoc ret %d\n", __FUNCTION__, ret));
@@ -2311,35 +2466,37 @@ dhd_get_suspend_bcn_li_dtim(dhd_pub_t *dhd)
 		goto exit;
 	}
 
-#ifdef ENABLE_MAX_DTIM_IN_SUSPEND
-	bcn_li_dtim = (int) (MAX_DTIM_ALLOWED_INTERVAL / (ap_beacon * dtim_period));
-	if (bcn_li_dtim == 0) {
-		bcn_li_dtim = 1;
-	}
-#else /* ENABLE_MAX_DTIM_IN_SUSPEND */
-	/* attemp to use platform defined dtim skip interval */
-	bcn_li_dtim = dhd->suspend_bcn_li_dtim;
+	if (dhd->max_dtim_enable) {
+		bcn_li_dtim = (int) (MAX_DTIM_ALLOWED_INTERVAL / (ap_beacon * dtim_period));
+		if (bcn_li_dtim == 0) {
+			bcn_li_dtim = 1;
+		}
+	} else {
+		/* attemp to use platform defined dtim skip interval */
+		bcn_li_dtim = dhd->suspend_bcn_li_dtim;
 
-	/* check if sta listen interval fits into AP dtim */
-	if (dtim_period > CUSTOM_LISTEN_INTERVAL) {
-		/* AP DTIM to big for our Listen Interval : no dtim skiping */
-		bcn_li_dtim = NO_DTIM_SKIP;
-		DHD_ERROR(("%s DTIM=%d > Listen=%d : too big ...\n",
-			__FUNCTION__, dtim_period, CUSTOM_LISTEN_INTERVAL));
-		goto exit;
-	}
+		/* check if sta listen interval fits into AP dtim */
+		if (dtim_period > CUSTOM_LISTEN_INTERVAL) {
+			/* AP DTIM to big for our Listen Interval : no dtim skiping */
+			bcn_li_dtim = NO_DTIM_SKIP;
+			DHD_ERROR(("%s DTIM=%d > Listen=%d : too big ...\n",
+				__FUNCTION__, dtim_period, CUSTOM_LISTEN_INTERVAL));
+			goto exit;
+		}
 
-	if ((dtim_period * ap_beacon * bcn_li_dtim) > MAX_DTIM_ALLOWED_INTERVAL) {
-		 allowed_skip_dtim_cnt = MAX_DTIM_ALLOWED_INTERVAL / (dtim_period * ap_beacon);
-		 bcn_li_dtim = (allowed_skip_dtim_cnt != 0) ? allowed_skip_dtim_cnt : NO_DTIM_SKIP;
-	}
+		if ((dtim_period * ap_beacon * bcn_li_dtim) > MAX_DTIM_ALLOWED_INTERVAL) {
+			allowed_skip_dtim_cnt =
+				MAX_DTIM_ALLOWED_INTERVAL / (dtim_period * ap_beacon);
+			bcn_li_dtim =
+				(allowed_skip_dtim_cnt != 0) ? allowed_skip_dtim_cnt : NO_DTIM_SKIP;
+		}
 
-	if ((bcn_li_dtim * dtim_period) > CUSTOM_LISTEN_INTERVAL) {
-		/* Round up dtim_skip to fit into STAs Listen Interval */
-		bcn_li_dtim = (int)(CUSTOM_LISTEN_INTERVAL / dtim_period);
-		DHD_TRACE(("%s agjust dtim_skip as %d\n", __FUNCTION__, bcn_li_dtim));
+		if ((bcn_li_dtim * dtim_period) > CUSTOM_LISTEN_INTERVAL) {
+			/* Round up dtim_skip to fit into STAs Listen Interval */
+			bcn_li_dtim = (int)(CUSTOM_LISTEN_INTERVAL / dtim_period);
+			DHD_TRACE(("%s agjust dtim_skip as %d\n", __FUNCTION__, bcn_li_dtim));
+		}
 	}
-#endif /* ENABLE_MAX_DTIM_IN_SUSPEND */
 
 	DHD_ERROR(("%s beacon=%d bcn_li_dtim=%d DTIM=%d Listen=%d\n",
 		__FUNCTION__, ap_beacon, bcn_li_dtim, dtim_period, CUSTOM_LISTEN_INTERVAL));
@@ -2639,7 +2796,7 @@ wl_iw_parse_channel_list(char** list_str, uint16* channel_list, int channel_num)
 #if defined(DHD_8021X_DUMP)
 /* Parse EAPOL 4 way handshake messages */
 void
-dhd_dump_eapol_4way_message(char *dump_data, bool direction)
+dhd_dump_eapol_4way_message(char *ifname, char *dump_data, bool direction)
 {
 	unsigned char type;
 	int pair, ack, mic, kerr, req, sec, install;
@@ -2655,25 +2812,25 @@ dhd_dump_eapol_4way_message(char *dump_data, bool direction)
 		sec = 0  != (us_tmp & 0x200);
 		install  = 0 != (us_tmp & 0x40);
 		if (!sec && !mic && ack && !install && pair && !kerr && !req) {
-			DHD_ERROR(("ETHER_TYPE_802_1X [%s] : M1 of 4way\n",
-				direction ? "TX" : "RX"));
+			DHD_ERROR(("ETHER_TYPE_802_1X[%s] [%s] : M1 of 4way\n",
+				ifname, direction ? "TX" : "RX"));
 		} else if (pair && !install && !ack && mic && !sec && !kerr && !req) {
-			DHD_ERROR(("ETHER_TYPE_802_1X [%s] : M2 of 4way\n",
-				direction ? "TX" : "RX"));
+			DHD_ERROR(("ETHER_TYPE_802_1X[%s] [%s] : M2 of 4way\n",
+				ifname, direction ? "TX" : "RX"));
 		} else if (pair && ack && mic && sec && !kerr && !req) {
-			DHD_ERROR(("ETHER_TYPE_802_1X [%s] : M3 of 4way\n",
-				direction ? "TX" : "RX"));
+			DHD_ERROR(("ETHER_TYPE_802_1X[%s] [%s] : M3 of 4way\n",
+				ifname, direction ? "TX" : "RX"));
 		} else if (pair && !install && !ack && mic && sec && !req && !kerr) {
-			DHD_ERROR(("ETHER_TYPE_802_1X [%s] : M4 of 4way\n",
-				direction ? "TX" : "RX"));
+			DHD_ERROR(("ETHER_TYPE_802_1X[%s] [%s] : M4 of 4way\n",
+				ifname, direction ? "TX" : "RX"));
 		} else {
-			DHD_ERROR(("ETHER_TYPE_802_1X [%s]: ver %d, type %d, replay %d\n",
-				direction ? "TX" : "RX",
+			DHD_ERROR(("ETHER_TYPE_802_1X[%s] [%s]: ver %d, type %d, replay %d\n",
+				ifname, direction ? "TX" : "RX",
 				dump_data[14], dump_data[15], dump_data[30]));
 		}
 	} else {
-		DHD_ERROR(("ETHER_TYPE_802_1X [%s]: ver %d, type %d, replay %d\n",
-				direction ? "TX" : "RX",
+		DHD_ERROR(("ETHER_TYPE_802_1X[%s] [%s]: ver %d, type %d, replay %d\n",
+				ifname, direction ? "TX" : "RX",
 				dump_data[14], dump_data[15], dump_data[30]));
 	}
 }

@@ -47,20 +47,17 @@ static int kbasep_mem_profile_seq_show(struct seq_file *sfile, void *data)
 {
 	struct kbase_context *kctx = sfile->private;
 
-	KBASE_DEBUG_ASSERT(kctx != NULL);
-
-	/* MALI_SEC_INTEGRATION */
+	struct kbase_device *kbdev = gpu_get_device_structure();
+	/* MALI_SEC_INTEGRATION - Destroyed context */
+	mutex_lock(&kbdev->kctx_list_lock);
 	{
-	struct kbase_device *kbdev = kctx->kbdev;
-
-	if(kbdev->vendor_callbacks->mem_profile_check_kctx)
-		if (!kbdev->vendor_callbacks->mem_profile_check_kctx(kctx))
-			return 0;
+		if ((kctx == NULL) || (kctx->destroying_context)) {
+			mutex_unlock(&kbdev->kctx_list_lock);
+ 			return 0;
+		}
+		atomic_inc(&kctx->mem_profile_showing_state);	
 	}
-
-	/* MALI_SEC_INTEGRATION */
-	if (kctx->destroying_context)
-		return 0;
+	mutex_unlock(&kbdev->kctx_list_lock);
 
 	spin_lock(&kctx->mem_profile_lock);
 	/* MALI_SEC_INTEGRATION */
@@ -69,7 +66,7 @@ static int kbasep_mem_profile_seq_show(struct seq_file *sfile, void *data)
 		seq_putc(sfile, '\n');
 	}
 	spin_unlock(&kctx->mem_profile_lock);
-
+	atomic_dec(&kctx->mem_profile_showing_state);
 	return 0;
 }
 

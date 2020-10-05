@@ -1,7 +1,7 @@
 /*
  * Customer HW 4 dependant file
  *
- * Copyright (C) 1999-2016, Broadcom Corporation
+ * Copyright (C) 1999-2017, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -42,12 +42,6 @@
 struct dhd_info;
 extern int _dhd_set_mac_address(struct dhd_info *dhd,
 	int ifidx, struct ether_addr *addr);
-
-struct cntry_locales_custom {
-	char iso_abbrev[WLC_CNTRY_BUF_SZ]; /* ISO 3166-1 country abbreviation */
-	char custom_locale[WLC_CNTRY_BUF_SZ]; /* Custom firmware locale */
-	int32 custom_locale_rev; /* Custom local revisin default -1 */
-};
 
 /* Locale table for sec */
 const struct cntry_locales_custom translate_custom_table[] = {
@@ -99,6 +93,7 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"",   "XZ", 1},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 1},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 1},	/* Universal if Country code is SUDAN */
+	{"SY", "XZ", 11},	/* Universal if Country code is SYRIAN ARAB REPUBLIC */
 	{"GL", "XZ", 1},	/* Universal if Country code is GREENLAND */
 	{"PS", "XZ", 1},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 1},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
@@ -177,7 +172,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"MH", "XZ", 11},	/* Universal if Country code is MARSHALL ISLANDS */
 	{"GL", "GP", 2},
 	{"AL", "AL", 2},
-	{"DZ", "GB", 6},
 	{"AS", "AS", 12},
 	{"AI", "AI", 1},
 	{"AF", "AD", 0},
@@ -225,7 +219,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"IE", "IE", 5},
 	{"IL", "IL", 14},
 	{"IT", "IT", 4},
-	{"JP", "JP", 968},
 	{"JO", "JO", 3},
 	{"KE", "SA", 0},
 	{"KW", "KW", 5},
@@ -239,7 +232,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"MO", "SG", 0},
 	{"MK", "MK", 2},
 	{"MW", "MW", 1},
-	{"MY", "MY", 3},
 	{"MV", "MV", 3},
 	{"MT", "MT", 4},
 	{"MQ", "MQ", 2},
@@ -274,10 +266,13 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"LK", "LK", 1},
 	{"SE", "SE", 4},
 	{"CH", "CH", 4},
-	{"TW", "TW", 1},
 	{"TH", "TH", 5},
 	{"TT", "TT", 3},
+#if defined(DHD_SUPPORT_TR_212)
+	{"TR", "TR", 212},
+#else
 	{"TR", "TR", 7},
+#endif
 	{"AE", "AE", 6},
 	{"GB", "GB", 6},
 	{"UY", "VE", 3},
@@ -289,8 +284,22 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"EC", "EC", 21},
 	{"SV", "SV", 25},
 	{"KR", "KR", 70},
-	{"RU", "RU", 988},
+#if defined(BCM4354_CHIP) || defined(BCM43454_CHIP) || defined(BCM43455_CHIP)
+	{"TW", "TW", 65},
+	{"AM", "AM", 1},
+	{"JP", "JP", 968},
+	{"RU", "RU", 986},
 	{"UA", "UA", 16},
+	{"MY", "MY", 19},
+	{"DZ", "DZ", 2},
+#else
+	{"TW", "TW", 1},
+	{"JP", "JP", 45},
+	{"RU", "RU", 13},
+	{"UA", "UA", 8},
+	{"MY", "MY", 3},
+	{"DZ", "GB", 6},
+#endif /* BCM4354_CHIP || BCM43454_CHIP || BCM43455_CHIP */
 	{"GT", "GT", 1},
 	{"MN", "MN", 1},
 	{"NI", "NI", 2},
@@ -339,25 +348,19 @@ void get_customized_country_code(void *adapter, char *country_iso_code, wl_count
 	return;
 }
 
+#define CIDINFO     PLATFORM_PATH".cid.info"
+#define PSMINFO     PLATFORM_PATH".psm.info"
+#define MACINFO     PLATFORM_PATH".mac.info"
+#define REVINFO     PLATFORM_PATH".rev"
+#define ANTINFO     PLATFORM_PATH".ant.info"
+#define WIFIVERINFO PLATFORM_PATH".wifiver.info"
+
 #ifdef PLATFORM_SLP
-#define CIDINFO "/opt/etc/.cid.info"
-#define PSMINFO "/opt/etc/.psm.info"
-#define MACINFO "/opt/etc/.mac.info"
-#define MACINFO_EFS NULL
-#define REVINFO "/opt/etc/.rev"
-#define WIFIVERINFO "/opt/etc/.wifiver.info"
-#define ANTINFO "/opt/etc/.ant.info"
-#define WRMAC_BUF_SIZE 19
+#define MACINFO_EFS     NULL
+#define WRMAC_BUF_SIZE  19
 #else
-#define MACINFO "/data/.mac.info"
-#define MACINFO_EFS "/efs/wifi/.mac.info"
-#define NVMACINFO "/data/.nvmac.info"
-#define	REVINFO "/data/.rev"
-#define CIDINFO "/data/.cid.info"
-#define PSMINFO "/data/.psm.info"
-#define WIFIVERINFO "/data/.wifiver.info"
-#define ANTINFO "/data/.ant.info"
-#define WRMAC_BUF_SIZE 18
+#define MACINFO_EFS     "/efs/wifi/.mac.info"
+#define WRMAC_BUF_SIZE  18
 #endif /* PLATFORM_SLP */
 
 #ifdef BCM4330_CHIP
@@ -850,7 +853,8 @@ static int dhd_write_cid_file(const char *filepath_cid, const char *buf, int buf
 	/* File is always created. */
 	fp = filp_open(filepath_cid, O_RDWR | O_CREAT, 0666);
 	if (IS_ERR(fp)) {
-		DHD_ERROR(("[WIFI_SEC] %s: File open error\n", filepath_cid));
+		DHD_ERROR(("[WIFI_SEC] %s: File open err %ld\n",
+			filepath_cid, PTR_ERR(fp)));
 		return -1;
 	} else {
 		oldfs = get_fs();

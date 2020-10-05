@@ -36,6 +36,8 @@
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 #include <linux/trustedui.h>
+struct sec_ts_data *tui_tsp_info;
+extern int tui_force_close(uint32_t arg);
 #endif
 
 #ifdef CONFIG_OF
@@ -871,7 +873,9 @@ static irqreturn_t sec_ts_irq_thread(int irq, void *ptr)
 	if (ts->lowpower_mode)
 		pm_wakeup_event(ts->input_dev->dev.parent, 1000);
 
+	mutex_lock(&ts->eventlock);
 	sec_ts_read_event(ts);
+	mutex_unlock(&ts->eventlock);
 
 	return IRQ_HANDLED;
 }
@@ -1541,6 +1545,10 @@ static int sec_ts_setup_drv_data(struct i2c_client *client)
 
 	INIT_DELAYED_WORK(&ts->reset_work, sec_ts_reset_work);
 	i2c_set_clientdata(client, ts);
+	
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	tui_tsp_info = ts;
+#endif
 
 	return ret;
 }
@@ -1608,6 +1616,7 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	mutex_init(&ts->lock);
 	mutex_init(&ts->device_mutex);
 	mutex_init(&ts->i2c_mutex);
+	mutex_init(&ts->eventlock);
 
 	/* Enable Power */
 	ts->plat_data->power(ts, true);
@@ -1790,10 +1799,26 @@ err_setup_drv_data:
 void sec_ts_release_all_finger(struct sec_ts_data *ts)
 {
 	int i;
+	mutex_lock(&ts->eventlock);
 
 	for (i=0; i < MAX_SUPPORT_TOUCH_COUNT; i++) {
 		input_mt_slot(ts->input_dev, i);
 		input_mt_report_slot_state(ts->input_dev, MT_TOOL_FINGER, false);
+
+		if ((ts->coord[i].action == SEC_TS_Coordinate_Action_Press) ||
+			(ts->coord[i].action == SEC_TS_Coordinate_Action_Move)) {
+			ts->touch_count--;
+			if (ts->touch_count < 0)
+				ts->touch_count = 0;
+
+			ts->coord[i].action = SEC_TS_Coordinate_Action_Release;
+
+			tsp_debug_info(true, &ts->client->dev,
+				"%s: [RA] tID:%d mc:%d tc:%d cal:0x%x [SE%02X%02X%02X]\n",
+				__func__, i, ts->coord[i].mcount, ts->touch_count, ts->cal_status,
+				ts->plat_data->panel_revision, ts->plat_data->img_version_of_ic[2],
+				ts->plat_data->img_version_of_ic[3]);
+		}
 		ts->coord[i].mcount = 0;
 	}
 
@@ -1804,11 +1829,14 @@ void sec_ts_release_all_finger(struct sec_ts_data *ts)
 	ts->touch_count = 0;
 
 	input_sync(ts->input_dev);
+
+	mutex_unlock(&ts->eventlock);
 }
 
 #ifdef CONFIG_TRUSTONIC_TRUSTED_UI
 void trustedui_mode_on(void){
-	return;
+	tsp_debug_info(true, &tui_tsp_info->client->dev, "%s, release all finger..", __func__);
+	sec_ts_release_all_finger(tui_tsp_info);
 }
 #endif
 
@@ -1821,6 +1849,7 @@ static int sec_ts_set_lowpowermode(struct sec_ts_data *ts, bool mode)
 			mode == TO_LOWPOWER_MODE ? "ENTER" :"EXIT");
 
 	buff[0] = mode;
+	ts->lowpower_status = mode;
 
 	ret = sec_ts_i2c_write(ts, SEC_TS_CMD_SET_POWER_MODE, buff, 1);
 	if (ret < 0)
@@ -1842,6 +1871,8 @@ static int sec_ts_set_lowpowermode(struct sec_ts_data *ts, bool mode)
 		tsp_debug_info(true, &ts->client->dev, "%s set s pay lowpower flag:%d buff:%d\n", __func__,
 			ts->lowpower_flag, buff[0]);
 	}
+
+	sec_ts_release_all_finger(ts);
 
 	if (device_may_wakeup(&ts->client->dev)) {
 		if (mode) {
@@ -1886,7 +1917,22 @@ static int sec_ts_input_open(struct input_dev *dev)
 	int ret;
 
 	tsp_debug_info(true, &ts->client->dev, "%s\n", __func__);
-	if (ts->lowpower_mode)
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+		tsp_debug_err(true, &ts->client->dev, "%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+			tsp_debug_err(true, &ts->client->dev, "%s TUI flag force clear!\n",	__func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
+
+	if (ts->lowpower_status)
 		sec_ts_set_lowpowermode(ts, TO_TOUCH_MODE);
 	else {
 		ret = sec_ts_start_device(ts);
@@ -1903,8 +1949,22 @@ static void sec_ts_input_close(struct input_dev *dev)
 
 	tsp_debug_info(true, &ts->client->dev, "%s\n", __func__);
 
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+	if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+		tsp_debug_err(true, &ts->client->dev, "%s TUI cancel event call!\n", __func__);
+		msleep(100);
+		tui_force_close(1);
+		msleep(200);
+		if(TRUSTEDUI_MODE_TUI_SESSION & trustedui_get_current_mode()){	
+			tsp_debug_err(true, &ts->client->dev, "%s TUI flag force clear!\n",	__func__);
+			trustedui_clear_mask(TRUSTEDUI_MODE_VIDEO_SECURED|TRUSTEDUI_MODE_INPUT_SECURED);
+			trustedui_set_mode(TRUSTEDUI_MODE_OFF);
+		}
+	}
+#endif
+
 	if (ts->lowpower_mode) {
-		sec_ts_release_all_finger(ts);
+		
 		sec_ts_set_lowpowermode(ts, TO_LOWPOWER_MODE);
 	} else
 		sec_ts_stop_device(ts);

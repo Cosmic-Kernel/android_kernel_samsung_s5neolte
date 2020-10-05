@@ -522,6 +522,9 @@ static int exynos_cpuidle_muic_notifier(struct notifier_block *nb,
 	case ATTACHED_DEV_JIG_UART_OFF_VB_MUIC:
 	case ATTACHED_DEV_JIG_UART_OFF_VB_OTG_MUIC:
 	case ATTACHED_DEV_JIG_UART_OFF_VB_FG_MUIC:
+#if defined(CONFIG_MUIC_S2MU005) && defined(CONFIG_SEC_FACTORY)
+	case ATTACHED_DEV_JIG_UART_ON_MUIC:	// 619k
+#endif
 		if (action == MUIC_NOTIFY_CMD_DETACH)
 			jig_is_attached = false;
 		else if (action == MUIC_NOTIFY_CMD_ATTACH)

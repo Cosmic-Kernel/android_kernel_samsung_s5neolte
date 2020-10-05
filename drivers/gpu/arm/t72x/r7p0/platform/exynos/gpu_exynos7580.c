@@ -108,11 +108,11 @@ static gpu_attribute gpu_config_attributes[] = {
 	{GPU_DVS, 0},
 	{GPU_PERF_GATHERING, 0},
 #ifdef MALI_SEC_HWCNT
-	{GPU_HWCNT_GATHERING, 1},
+	{GPU_HWCNT_GATHERING, 0},
 	{GPU_HWCNT_POLLING_TIME, 90},
 	{GPU_HWCNT_UP_STEP, 3},
 	{GPU_HWCNT_DOWN_STEP, 2},
-	{GPU_HWCNT_GPR, 1},
+	{GPU_HWCNT_GPR, 0},
 	{GPU_HWCNT_DUMP_PERIOD, 50}, /* ms */
 	{GPU_HWCNT_CHOOSE_JM , 0},
 	{GPU_HWCNT_CHOOSE_SHADER , 0x5FF}, /* since TEX_ISSUES offset is 29 so we need non-zero values from 27-30 offset

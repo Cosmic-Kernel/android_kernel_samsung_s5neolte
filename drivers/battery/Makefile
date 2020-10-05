@@ -9,6 +9,7 @@ obj-$(CONFIG_FUELGAUGE_MAX77843)	+= max77843_fuelgauge.o
 obj-$(CONFIG_FUELGAUGE_MAX77833)	+= max77833_fuelgauge.o
 obj-$(CONFIG_FUELGAUGE_MAX77833)	+= max77833_fuelgauge.o
 obj-$(CONFIG_FUELGAUGE_S2MU003)        += s2mu003_fuelgauge.o
+obj-$(CONFIG_FUELGAUGE_S2MU005)        += s2mu005_fuelgauge.o
 obj-$(CONFIG_FUELGAUGE_SM5703)		+= sm5703_fuelgauge.o
 obj-$(CONFIG_FUELGAUGE_SM5705)		+= sm5705_fuelgauge.o
 obj-$(CONFIG_SMART_FUELGAUGE)		+= smart_fuelgauge.o
@@ -29,6 +30,7 @@ obj-$(CONFIG_CHARGER_MAX77833)	+= max77833_charger.o
 obj-$(CONFIG_CHARGER_MAX77888)	+= max77888_charger.o
 obj-$(CONFIG_CHARGER_MAX77833)	+= max77833_charger.o
 obj-$(CONFIG_CHARGER_S2MU003)   += s2mu003_charger.o
+obj-$(CONFIG_CHARGER_S2MU005)   += s2mu005_charger.o
 obj-$(CONFIG_CHARGER_SM5703)	+= sm5703_charger.o
 obj-$(CONFIG_CHARGER_SM5705)	+= sm5705_charger.o sm5705_charger_oper.o
 

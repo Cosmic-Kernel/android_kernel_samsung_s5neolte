@@ -30,13 +30,17 @@ struct abov_touchkey_platform_data {
 	int gpio_rst;
 	int gpio_tkey_led_en;
 	int gpio_seperated;
+	int sub_det;
+	int ds_det;	//temp A5x ltn
 	struct regulator *vdd_io_vreg;
 	struct regulator *avdd_vreg;
+	struct regulator *dvdd_vreg;
 	void (*input_event) (void *data);
-	int (*power) (struct abov_touchkey_platform_data *pdata, bool on);
-	int (*keyled) (struct abov_touchkey_platform_data *pdata, bool on);
-	const char *regulator_ic;
-	const char *regulator_led;
+	int (*power) (void *, bool on);
+	int (*keyled) (bool on);
+	char *fw_path;
+	u8 fw_checksum_h;
+	u8 fw_checksum_l;
 	bool boot_on_ldo;
 };
 

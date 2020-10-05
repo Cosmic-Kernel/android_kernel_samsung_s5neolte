@@ -36,6 +36,9 @@
 #if defined(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX)
 #include <linux/i2c/zinitix_bt532_ts.h>
 #endif
+#if defined(CONFIG_TOUCHSCREEN_SEC_TS)
+#include "../../../input/touchscreen/sec_ts/sec_ts.h"
+#endif
 
 /* I2C register for reset */
 #define HSI2C7_PA_BASE_ADDRESS	0x14E10000
@@ -399,13 +402,13 @@ uint32_t hal_tui_deactivate(void)
 	pr_info(KERN_ERR "Disable touch!\n");
 	disable_irq(tsp_irq_num);
 
-#if defined(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX)
+#if defined(CONFIG_TOUCHSCREEN_ZINITIX_ZT75XX) || defined(CONFIG_TOUCHSCREEN_SEC_TS)
 		tui_delay(5);
 		/*esd timer disable*/
 		trustedui_mode_on();
 		tui_delay(95);
 #else
-		tui_delay(100);
+		tui_delay(1);
 #endif
 
 	pr_info(KERN_ERR "tsp_irq_num =%d\n",tsp_irq_num);

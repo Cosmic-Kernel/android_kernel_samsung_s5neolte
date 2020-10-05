@@ -156,7 +156,9 @@ static inline int qlen(struct usb_gadget *gadget)
 	xprintk(dev , KERN_INFO , fmt , ## args)
 
 /*-------------------------------------------------------------------------*/
-
+#ifdef CONFIG_USB_RNDIS_CMCC
+int tx_queue_threshold = 10;
+#endif
 /* NETWORK DRIVER HOOKUP (to the layer above this driver) */
 
 static int ueth_change_mtu(struct net_device *net, int new_mtu)
@@ -570,7 +572,7 @@ static void process_uether_rx(struct eth_dev *dev)
 #ifndef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
 			DBG(dev, "rx length %d\n", skb->len);
 #else
-			printk(KERN_DEBUG "usb: %s Drop rx length %d\n",__func__,skb->len);
+			pr_debug("usb: %s Drop rx length %d\n",__func__,skb->len);
 #endif
 
 			DBG(dev, "rx length %d\n", skb->len);
@@ -736,9 +738,14 @@ static void tx_complete(struct usb_ep *ep, struct usb_request *req)
 
 	atomic_dec(&dev->tx_qlen);
 #endif
-
-	if (netif_carrier_ok(dev->net))
-		netif_wake_queue(dev->net);
+#ifdef CONFIG_USB_RNDIS_CMCC
+	if(dev->no_tx_req_used <= tx_queue_threshold) {
+#endif
+		if (netif_carrier_ok(dev->net))
+			netif_wake_queue(dev->net);
+#ifdef CONFIG_USB_RNDIS_CMCC
+	}
+#endif
 }
 
 static inline int is_promisc(u16 cdc_filter)
@@ -926,12 +933,14 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 	req->complete = tx_complete;
 
 	/* NCM requires no zlp if transfer is dwNtbInMaxSize */
-	if (dev->port_usb->is_fixed &&
-	    length == dev->port_usb->fixed_in_len &&
-	    (length % in->maxpacket) == 0)
-		req->zero = 0;
-	else
-		req->zero = 1;
+	if (dev->port_usb) {
+		if (dev->port_usb->is_fixed &&
+		    length == dev->port_usb->fixed_in_len &&
+		    (length % in->maxpacket) == 0)
+			req->zero = 0;
+		else
+			req->zero = 1;
+	}
 
 	/* use zlp framing on tx for strict CDC-Ether conformance,
 	 * though any robust network rx path ignores extra padding.
@@ -984,7 +993,7 @@ static netdev_tx_t eth_start_xmit(struct sk_buff *skb,
 drop:
 		dev->net->stats.tx_dropped++;
 		spin_lock_irqsave(&dev->req_lock, flags);
-		if (list_empty(&dev->tx_reqs))
+		if (dev->port_usb && list_empty(&dev->tx_reqs))
 			netif_start_queue(net);
 #ifdef CONFIG_USB_RNDIS_MULTIPACKET
 		list_add_tail(&req->list, &dev->tx_reqs);
