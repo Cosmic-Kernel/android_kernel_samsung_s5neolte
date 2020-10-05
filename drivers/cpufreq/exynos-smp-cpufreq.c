@@ -914,7 +914,7 @@ static int exynos_cpufreq_init(struct cpufreq_policy *policy)
 	voltage_tolerance = exynos_get_voltage_tolerance(cpu_dev);
 	policy->cur = exynos_cpufreq_get(policy->cpu);
 	/* Later this code will be removed. This is for first lot */
-	policy->cpuinfo.min_freq = 300000;
+	policy->cpuinfo.min_freq = 400000;
 	freq_table[cur_cluster][13].frequency = CPUFREQ_ENTRY_INVALID;
 
 	if (samsung_rev() == EXYNOS7580_REV_0) {
