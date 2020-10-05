@@ -108,7 +108,7 @@ enum is_subscenario_id {
 	ISS_SUB_SCENARIO_DUAL_VIDEO = 3,	/* 3: dual video */
 	ISS_SUB_SCENARIO_VIDEO_HIGH_SPEED = 4,	/* 4: video high speed */
 	ISS_SUB_SCENARIO_STILL_CAPTURE = 5,	/* 5: still capture */
-	ISS_SUB_SCENARIO_FHD_60FPS = 6,		/* 6: video FHD 60fps */
+	ISS_SUB_SCENARIO_FHD_60FPS = 6,	/* 6: video FHD 60fps */
 	ISS_SUB_SCENARIO_UHD_30FPS = 7,         /* 7: video UHD 30fps */
 	ISS_SUB_SCENARIO_WVGA_300FPS = 8,       /* 8: video WVGA 300fps */
 	ISS_SUB_SCENARIO_STILL_PREVIEW_WDR = 9,
@@ -124,19 +124,23 @@ enum is_subscenario_id {
 	ISS_SUB_SCENARIO_STILL_CAPTURE_LLS = 19,
 	ISS_SUB_SCENARIO_STILL_CAPTURE_WDR_LLS = 20,
 	ISS_SUB_SCENARIO_STILL_CAPTURE_WDR_AUTO_ZOOM = 21,
-	ISS_SUB_SCENARIO_STILL_CAPTURE_WDR_AUTO_ZOOM_INDOOR = 22,
-	ISS_SUB_SCENARIO_STILL_CAPTURE_WDR_AUTO_ZOOM_OUTDOOR = 23,
+	ISS_SUB_SCENARIO_STILL_CAPTURE_WDR_AUTO_ZOOM_OUTDOOR = 22,
+	ISS_SUB_SCENARIO_STILL_CAPTURE_WDR_AUTO_ZOOM_INDOOR = 23,
 	ISS_SUB_SCENARIO_STILL_CAPTURE_WDR_AUTO = 24,
 	ISS_SUB_SCENARIO_VIDEO_WDR_AUTO = 25,
 	ISS_SUB_SCENARIO_STILL_PREVIEW_WDR_AUTO = 26,
 	ISS_SUB_SCENARIO_FHD_240FPS = 27,
-	ISS_SUB_END,
 
-	/* These values will be deprecated */
-	ISS_SUB_SCENARIO_FRONT_VT1 = 4,		/* 4: front camera VT1 for 3G (Temporary) */
-	ISS_SUB_SCENARIO_FRONT_VT2 = 5,		/* 5: front camera VT2 for LTE (Temporary) */
-	ISS_SUB_SCENARIO_FRONT_SMART_STAY = 6,	/* 6: front camera smart stay (Temporary) */
-	ISS_SUB_SCENARIO_FRONT_PANORAMA = 7,    /* 7: front camera front panorama (Temporary) */
+	ISS_SUB_SCENARIO_FRONT_VT1 = 31,		/*  31: front camera VT1 */
+	ISS_SUB_SCENARIO_FRONT_VT2 = 32,		/* 32: front camera VT2 */
+	ISS_SUB_SCENARIO_FRONT_SMART_STAY = 33,	/* 33: front camera smart stay */
+	ISS_SUB_SCENARIO_FRONT_PANORAMA = 34,    /* 34: front camera front panorama */
+	ISS_SUB_SCENARIO_FRONT_C2_OFF_STILL_PREVIEW = 35,    /* 35: C2 off front still preview */
+	ISS_SUB_SCENARIO_FRONT_C2_OFF_STILL_CAPTURE = 36,	/* 36: C2 off front still capture */
+	ISS_SUB_SCENARIO_FRONT_C2_OFF_VIDEO = 37,    /* 37: C2 off front video */
+	ISS_SUB_SCENARIO_FRONT_VT4 = 38,        /* 38: front camera VT4 */
+	ISS_SUB_SCENARIO_FRONT_VT1_STILL_CAPTURE = 39,   /* 39: front camera VT1 still capture */
+	ISS_SUB_END,
 };
 
 enum is_system_control_id {

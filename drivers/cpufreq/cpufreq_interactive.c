@@ -1508,6 +1508,7 @@ unsigned int cpufreq_interactive_get_hispeed_freq(int cpu)
 }
 
 #ifdef CONFIG_ARCH_EXYNOS
+#ifndef CONFIG_EXYNOS7580_QUAD
 static int cpufreq_interactive_cluster1_min_qos_handler(struct notifier_block *b,
 						unsigned long val, void *v)
 {
@@ -1609,6 +1610,7 @@ exit:
 static struct notifier_block cpufreq_interactive_cluster1_max_qos_notifier = {
 	.notifier_call = cpufreq_interactive_cluster1_max_qos_handler,
 };
+#endif
 #endif
 
 #if defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ) || defined(CONFIG_ARM_EXYNOS_SMP_CPUFREQ)
@@ -1727,8 +1729,10 @@ static int __init cpufreq_interactive_init(void)
 	mutex_init(&gov_lock);
 
 #ifdef CONFIG_ARCH_EXYNOS
+#ifndef CONFIG_EXYNOS7580_QUAD
 	pm_qos_add_notifier(PM_QOS_CLUSTER1_FREQ_MIN, &cpufreq_interactive_cluster1_min_qos_notifier);
 	pm_qos_add_notifier(PM_QOS_CLUSTER1_FREQ_MAX, &cpufreq_interactive_cluster1_max_qos_notifier);
+#endif
 #if defined(CONFIG_ARM_EXYNOS_MP_CPUFREQ) || defined(CONFIG_ARM_EXYNOS_SMP_CPUFREQ)
 	pm_qos_add_notifier(PM_QOS_CLUSTER0_FREQ_MIN, &cpufreq_interactive_cluster0_min_qos_notifier);
 	pm_qos_add_notifier(PM_QOS_CLUSTER0_FREQ_MAX, &cpufreq_interactive_cluster0_max_qos_notifier);

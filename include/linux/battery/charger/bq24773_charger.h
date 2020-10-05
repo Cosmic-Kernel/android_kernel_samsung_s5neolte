@@ -52,6 +52,7 @@ struct bq24773_charger {
 	struct mutex            i2c_lock;
 
 	struct power_supply	psy_chg;
+	struct power_supply	psy_otg;
 
 	struct workqueue_struct *wqueue;
 	struct delayed_work     afc_work;
@@ -68,6 +69,9 @@ struct bq24773_charger {
 	unsigned int    chg_float_voltage;
 	int		status;
 	int		siop_level;
+
+	int             otg_en;
+	int             otg_en2;
 
 	/* software regulation */
 	bool		soft_reg_state;

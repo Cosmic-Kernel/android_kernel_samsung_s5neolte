@@ -585,10 +585,8 @@ int exynos7_devfreq_int_tmu_notifier(struct notifier_block *nb, unsigned long ev
 		} else {
 			data->volt_offset = 0;
 			set_volt = get_limit_voltage(data->old_volt - COLD_VOLT_OFFSET, data->volt_offset);
-			data->old_volt = set_volt;
 		}
-
-		regulator_set_voltage(data->vdd_int, set_volt, REGULATOR_MAX_MICROVOLT);
+		exynos7_devfreq_int_set_volt(data, set_volt, REGULATOR_MAX_MICROVOLT);
 out:
 		mutex_unlock(&data->lock);
 	}
@@ -1232,10 +1230,9 @@ int exynos7_devfreq_isp_tmu_notifier(struct notifier_block *nb, unsigned long ev
 		} else {
 			data->volt_offset = 0;
 			set_volt = get_limit_voltage(data->old_volt - COLD_VOLT_OFFSET, data->volt_offset);
-			data->old_volt = set_volt;
 		}
 
-		regulator_set_voltage(data->vdd_isp_cam0, set_volt, REGULATOR_MAX_MICROVOLT);
+		exynos7_devfreq_isp_set_volt(data, set_volt, REGULATOR_MAX_MICROVOLT);
 out:
 		mutex_unlock(&data->lock);
 	}
@@ -1781,6 +1778,7 @@ static struct dmc_phy_dfs_mif_table dfs_phy_mif_table[] = {
 enum devfreq_mif_thermal_autorate {
 	RATE_ONE = 0x000C0065,
 	RATE_TWO = 0x001800CA,
+	RATE_FOUR = 0x00300194,
 	RATE_HALF = 0x00060032,
 	RATE_QUARTER = 0x00030019,
 };
@@ -1932,7 +1930,17 @@ int exynos7_devfreq_mif_init_parameter(struct devfreq_data_mif *data)
 	__raw_writel(0x9001400, data->base_drex + 0x10);
 	bank = (__raw_readl(data->base_drex + 0x4) >> 27) & 0x1;
 
-	if (vendor == 0x6) { /* bank 0 : all bank 1 : perbank */
+	/*
+	 * Vendor 0xff : Micron 0x6 : Hynix, 0x3 : Elpida, 0x1 : Samsung
+	 * Bank 0 : All bank, 1 : Per bank
+	 * Density : 0x6 : 4gb, 0x7 : 8gb, 0xE : 6gb
+	 */
+	if (vendor == 0xff) {
+		if (density == 0x7)
+			dfs_drex_mif_table = dfs_drex_mif_table_hnon_samsung[bank];
+		else
+			panic("Wrong MCP density : %x\n", density);
+	}if (vendor == 0x6) {
 		dfs_drex_mif_table = dfs_drex_mif_table_hnon_samsung[bank];
 	} else if (vendor == 0x3) {
 		dfs_drex_mif_table = dfs_drex_mif_table_mnon_samsung[bank];
@@ -2162,6 +2170,32 @@ static int exynos7_devfreq_mif_set_freq(struct devfreq_data_mif *data,
 	return 0;
 }
 
+static unsigned int mif_thermal_level_cs0;
+static unsigned int mif_thermal_level_cs1;
+
+static ssize_t mif_show_templvl_cs0(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u\n", mif_thermal_level_cs0);
+}
+static ssize_t mif_show_templvl_cs1(struct device *dev, struct device_attribute *attr, char *buf)
+{
+	return snprintf(buf, PAGE_SIZE, "%u\n", mif_thermal_level_cs1);
+}
+
+static DEVICE_ATTR(templvl_cs0, 0644, mif_show_templvl_cs0, NULL);
+static DEVICE_ATTR(templvl_cs1, 0644, mif_show_templvl_cs1, NULL);
+
+static struct attribute *devfreq_mif_sysfs_entries[] = {
+	&dev_attr_templvl_cs0.attr,
+	&dev_attr_templvl_cs1.attr,
+	NULL,
+};
+
+struct attribute_group devfreq_mif_attr_group = {
+	.name	= "mif_temp_level",
+	.attrs	= devfreq_mif_sysfs_entries,
+};
+
 static void exynos7_devfreq_swtrip(void)
 {
 #ifdef CONFIG_EXYNOS_SWTRIP
@@ -2195,6 +2229,7 @@ static void exynos7_devfreq_thermal_monitor(struct work_struct *work)
 		max_thermal_level = tmp_thermal_level;
 
 	thermal_level_cs0 = tmp_thermal_level;
+	mif_thermal_level_cs0 = thermal_level_cs0;
 
 	__raw_writel(0x09101000, base_drex + DREX_DIRECTCMD);
 	mrstatus = __raw_readl(base_drex + DREX_MRSTATUS);
@@ -2203,12 +2238,16 @@ static void exynos7_devfreq_thermal_monitor(struct work_struct *work)
 		max_thermal_level = tmp_thermal_level;
 
 	thermal_level_cs1 = tmp_thermal_level;
+	mif_thermal_level_cs1 = thermal_level_cs1;
 
 	mutex_unlock(&data_mif->lock);
 
 	switch (max_thermal_level) {
 	case 0:
 	case 1:
+		timingaref_value = RATE_FOUR;
+		polling_period = 500;
+		break;
 	case 2:
 		timingaref_value = RATE_TWO;
 		polling_period = 500;
@@ -2393,10 +2432,9 @@ int exynos7_devfreq_mif_tmu_notifier(struct notifier_block *nb, unsigned long ev
 		} else {
 			data->volt_offset = 0;
 			set_volt = get_limit_voltage(data->old_volt - COLD_VOLT_OFFSET, data->volt_offset);
-			data->old_volt = set_volt;
 		}
 
-		regulator_set_voltage(data->vdd_mif, set_volt, REGULATOR_MAX_MICROVOLT);
+		exynos7_devfreq_mif_set_volt(data, set_volt, REGULATOR_MAX_MICROVOLT);
 out:
 		mutex_unlock(&data->lock);
 	}

@@ -100,7 +100,7 @@ u32 ist30xx_get_fw_chksum(struct ist30xx_data *data)
 	return chksum;
 }
 
-#define KEY_SENSITIVITY_OFFSET  0x10
+#define KEY_SENSITIVITY_OFFSET  0x04
 u32 key_sensitivity = 0;
 int ist30xx_get_key_sensitivity(struct ist30xx_data *data, int id)
 {
@@ -320,12 +320,14 @@ static void fw_update(void *dev_data)
 		ret = ist30xx_fw_update(data, fw, fsize);
 		if (ret) {
 			sec->cmd_state = CMD_STATE_FAIL;
+			mutex_unlock(&ist30xx_mutex);
 			break;
 		}
 
 		mutex_unlock(&ist30xx_mutex);
 
 		ist30xx_calibrate(data, 1);
+		ist30xx_start(data);
 		break;
 
 	default:
@@ -658,6 +660,16 @@ int check_tsp_channel(void *dev_data, int width, int height)
 	struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
 	struct sec_factory *sec = (struct sec_factory *)&data->sec;
 
+	if (data->tsp_info.dir.swap_xy) {
+		if ((sec->cmd_param[0] < 0) || (sec->cmd_param[0] >= height) ||
+			(sec->cmd_param[1] < 0) || (sec->cmd_param[1] >= width)) {
+				tsp_info("%s: parameter error: %u,%u\n",
+					__func__, sec->cmd_param[0], sec->cmd_param[1]);
+		} else {
+			node = sec->cmd_param[1] + sec->cmd_param[0] * width;
+			tsp_info("%s: node = %d\n", __func__, node);
+		}
+	} else {
 	if ((sec->cmd_param[0] < 0) || (sec->cmd_param[0] >= width) ||
 			(sec->cmd_param[1] < 0) || (sec->cmd_param[1] >= height)) {
 		tsp_info("%s: parameter error: %u,%u\n",
@@ -665,6 +677,7 @@ int check_tsp_channel(void *dev_data, int width, int height)
 	} else {
 		node = sec->cmd_param[0] + sec->cmd_param[1] * width;
 		tsp_info("%s: node = %d\n", __func__, node);
+	}
 	}
 
 	return node;
@@ -955,8 +968,11 @@ int get_read_all_data(struct ist30xx_data *data, u8 flag)
 			case TEST_CM_ALL_DATA:
 				count += snprintf(temp, 10, "%d,", ts_cmcs_buf->cm[ii]);
 				break;
-			case TEST_SLOPE_ALL_DATA:
+			case TEST_SLOPE0_ALL_DATA:
 				count += snprintf(temp, 10, "%d,", ts_cmcs_buf->slope0[ii]);
+				break;
+			case TEST_SLOPE1_ALL_DATA:
+				count += snprintf(temp, 10, "%d,", ts_cmcs_buf->slope1[ii]);
 				break;
 			case TEST_CS_ALL_DATA:
 				count += snprintf(temp, 10, "%d,", ts_cmcs_buf->cs[ii]);
@@ -993,17 +1009,30 @@ void get_cm_all_data(void *dev_data) {
 		sec->cmd_state = CMD_STATE_FAIL;
 	else
 		sec->cmd_state = CMD_STATE_OK;
-
 }
 
-void get_slope_all_data(void *dev_data) {
+void get_slope0_all_data(void *dev_data) {
 	struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
 	struct sec_factory *sec = (struct sec_factory *)&data->sec;
 	int ret;
 
 	set_default_result(sec);
 
-	ret = get_read_all_data(data, TEST_SLOPE_ALL_DATA);
+	ret = get_read_all_data(data, TEST_SLOPE0_ALL_DATA);
+	if (ret < 0)
+		sec->cmd_state = CMD_STATE_FAIL;
+	else
+		sec->cmd_state = CMD_STATE_OK;
+}
+
+void get_slope1_all_data(void *dev_data) {
+	struct ist30xx_data *data = (struct ist30xx_data *)dev_data;
+	struct sec_factory *sec = (struct sec_factory *)&data->sec;
+	int ret;
+
+	set_default_result(sec);
+
+	ret = get_read_all_data(data, TEST_SLOPE1_ALL_DATA);
 	if (ret < 0)
 		sec->cmd_state = CMD_STATE_FAIL;
 	else
@@ -1609,7 +1638,8 @@ struct tsp_cmd tsp_cmds[] = {
 	{ TSP_CMD("get_raw_value",   get_raw_value),   },
 	{ TSP_CMD("get_raw_all_data", get_raw_all_data),},
 	{ TSP_CMD("get_cm_all_data", get_cm_all_data),},
-	{ TSP_CMD("get_slope_all_data", get_slope_all_data),},
+	{ TSP_CMD("get_slope0_all_data", get_slope0_all_data),},
+	{ TSP_CMD("get_slope1_all_data", get_slope1_all_data),},
 	{ TSP_CMD("get_cs_all_data", get_cs_all_data),},
 	{ TSP_CMD("get_checksum_data", get_checksum_data),},
 	{ TSP_CMD("run_cm_test",     run_cm_test),     },
@@ -1720,6 +1750,7 @@ int sec_touch_sysfs(struct ist30xx_data *data)
 {
 	int ret;
 
+#if IST30XX_USE_KEY
 	/* /sys/class/sec/sec_touchkey */
 	sec_touchkey = sec_device_create(data, "sec_touchkey");
 	if (IS_ERR(sec_touchkey)) {
@@ -1731,7 +1762,7 @@ int sec_touch_sysfs(struct ist30xx_data *data)
 		tsp_err("Failed to create sysfs group(%s)!\n", "sec_touchkey");
 		goto err_sec_touchkey_attr;
 	}
-
+#endif
 	/* /sys/class/sec/tsp */
 	sec_fac_dev = sec_device_create(data, "tsp");
 	if (IS_ERR(sec_fac_dev)) {
@@ -1749,12 +1780,19 @@ int sec_touch_sysfs(struct ist30xx_data *data)
 
 	return 0;
 
-err_sec_fac_dev_attr:
-	sec_device_destroy(2);
-err_sec_fac_dev:
-err_sec_touchkey_attr:
-	sec_device_destroy(1);
-err_sec_touchkey:
+#if IST30XX_USE_KEY
+	err_sec_fac_dev_attr:
+		sec_device_destroy(2);
+	err_sec_fac_dev:
+	err_sec_touchkey_attr:
+		sec_device_destroy(1);
+	err_sec_touchkey:
+#else
+	err_sec_fac_dev_attr:
+		sec_device_destroy(1);
+	err_sec_fac_dev:
+#endif
+
 	return -ENODEV;
 }
 EXPORT_SYMBOL(sec_touch_sysfs);

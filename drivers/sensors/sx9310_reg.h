@@ -25,7 +25,7 @@
 #define SX9310_STAT0_REG	0x01
 #define SX9310_STAT1_REG	0x02
 #define SX9310_IRQ_ENABLE_REG	0x03
-#define SX9310_IRQFUNC_REG		0x04
+#define SX9310_IRQFUNC_REG	0x04
 #define SX9310_CPS_CTRL0_REG	0x10
 #define SX9310_CPS_CTRL1_REG	0x11
 #define SX9310_CPS_CTRL2_REG	0x12
@@ -84,9 +84,6 @@
 
 /* SoftReset */
 #define SX9310_SOFTRESET  0xDE
-
-
-// #define SX9310_CS2_GND
 #define SX9310_CS0_GND
 
 struct smtc_reg_data {
@@ -105,7 +102,7 @@ static const struct smtc_reg_data setup_reg[] = {
 	},
 	{
 		.reg = SX9310_CPS_CTRL0_REG,
-		.val = 0x20,
+		.val = 0x80, /* SCANPERIOD: 400ms */
 	},
 	{
 		.reg = SX9310_CPS_CTRL1_REG,
@@ -129,23 +126,23 @@ static const struct smtc_reg_data setup_reg[] = {
 #endif
 	{
 		.reg = SX9310_CPS_CTRL3_REG,
-		.val = 0x0F,
+		.val = 0x02, /* CS1 GAIN : x4 */
 	},
 	{
 		.reg = SX9310_CPS_CTRL4_REG,
-		.val = 0x0D,
+		.val = 0x0D, /* RESOLUTION: 256, FREQ: 166.7 KHz */
 	},
 	{
 		.reg = SX9310_CPS_CTRL5_REG,
-		.val = 0xC1,
+		.val = 0xC0, /* RANGE: SMALL, RAWFILT: 0 */
 	},
 	{
 		.reg = SX9310_CPS_CTRL6_REG,
-		.val = 0x10,
+		.val = 0x10, /* AVGTHRESH: +-8192 */
 	},
 	{
 		.reg = SX9310_CPS_CTRL7_REG,
-		.val = 0x4B,
+		.val = 0x4A, /* AVGPOSFILT: 1-1/64, AVGNEGFILT: 1-1/2 */
 	},
 	{
 		.reg = SX9310_CPS_CTRL8_REG,
@@ -157,7 +154,7 @@ static const struct smtc_reg_data setup_reg[] = {
 	},
 	{
 		.reg = SX9310_CPS_CTRL10_REG,
-		.val = 0x10,
+		.val = 0x10, /* HYSTERESIS: +-6% */
 	},
 #if defined(SX9310_CS2_GND)
 	{

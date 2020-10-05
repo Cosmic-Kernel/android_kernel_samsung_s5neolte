@@ -399,12 +399,13 @@ static int exynos7_devfreq_mif_probe(struct platform_device *pdev)
 	data->devfreq->min_freq = plat_data->default_qos;
 	data->devfreq->max_freq = exynos7_devfreq_mif_governor_data.cal_qos_max;
 
+	ret = sysfs_create_group(&data->devfreq->dev.kobj, &devfreq_mif_attr_group);
+
 	register_reboot_notifier(&exynos7_mif_reboot_notifier);
 
 #ifdef CONFIG_EXYNOS_THERMAL
 	exynos_tmu_add_notifier(&data->tmu_notifier);
 #endif
-
 	data->use_dvfs = true;
 
 	return ret;

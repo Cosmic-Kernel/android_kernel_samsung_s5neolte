@@ -1256,7 +1256,9 @@ err:
 int sdio_reset_comm(struct mmc_card *card)
 {
 
-#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)
+#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)|| \
+    defined(CONFIG_BCM4343) || defined(CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined(CONFIG_BCM43454_MODULE)
 	struct mmc_host *host = card->host;
 	u32 ocr;
 	int err;

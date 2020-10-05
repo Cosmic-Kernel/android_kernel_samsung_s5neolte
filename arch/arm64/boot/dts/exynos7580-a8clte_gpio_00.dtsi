@@ -43,10 +43,10 @@
 	pinctrl-names = "sleep";
 	pinctrl-0 = <&sleep2>;
 	sleep2: sleep-state {
-		PIN_SLP(gpc0-0, INPUT, DOWN);	/* BTP_SPI_CLK */
-		PIN_SLP(gpc0-1, INPUT, DOWN);	/* BTP_SPI_CS_N */
+		PIN_SLP(gpc0-0, OUT0, NONE);	/* BTP_SPI_CLK */
+		PIN_SLP(gpc0-1, OUT0, NONE);	/* BTP_SPI_CS_N */
 		PIN_SLP(gpc0-2, INPUT, DOWN);	/* BTP_SPI_MISO */
-		PIN_SLP(gpc0-3, INPUT, DOWN);	/* BTP_SPI_MOSI */
+		PIN_SLP(gpc0-3, OUT0, NONE);	/* BTP_SPI_MOSI */
 	};
 };
 
@@ -136,9 +136,9 @@
 		PIN_SLP(gpd1-1, PREV, NONE);	/* BTP_RST_N */
 		PIN_SLP(gpd1-2, INPUT, DOWN);	/* NC */
 		PIN_SLP(gpd1-3, INPUT, DOWN);	/* MLCD_RST */
-		PIN_SLP(gpd1-4, INPUT, DOWN);	/* BTP_CHECK */
-		PIN_SLP(gpd1-5, INPUT, DOWN);	/* BTP_LDO_EN */
-		PIN_SLP(gpd1-6, OUT0, NONE);	/* BTP_OCP_EN */
+		PIN_SLP(gpd1-4, PREV, DOWN);	/* BTP_CHECK */
+		PIN_SLP(gpd1-5, PREV, DOWN);	/* BTP_LDO_EN */
+		PIN_SLP(gpd1-6, OUT0, NONE);	/* NC */
 
 		PIN_SLP(gpd2-0, INPUT, NONE);	/* IF_PMIC_SCL_1P8 */
 		PIN_SLP(gpd2-1, INPUT, NONE);	/* IF_PMIC_SDA_1P8 */

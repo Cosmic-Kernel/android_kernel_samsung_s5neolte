@@ -1718,9 +1718,11 @@ struct samsung_pin_ctrl exynos7580_pin_ctrl[] = {
 		.geint_mask	= EXYNOS_GPIO_EMASK_OFFSET,
 		.geint_pend	= EXYNOS_GPIO_EPEND_OFFSET,
 		.svc		= EXYNOS_SVC_OFFSET,
+#ifndef ENABLE_SENSORS_FPRINT_SECURE
 		.eint_gpio_init = exynos_eint_gpio_init,
 		.suspend	= exynos5430_pinctrl_suspend,
 		.resume	= exynos5430_pinctrl_resume,
+#endif
 		.label		= "exynos7580-gpio-ctrl2",
 	}, {
 		/* pin-controller instance 3 FSYS data */
@@ -1779,8 +1781,10 @@ struct samsung_pin_ctrl exynos7580_pin_ctrl[] = {
 		.geint_pend	= EXYNOS_GPIO_EPEND_OFFSET,
 		.svc		= EXYNOS_SVC_OFFSET,
 		.eint_gpio_init = exynos_eint_gpio_init,
+#ifndef CONFIG_MST_SECURE_GPIO
 		.suspend	= exynos5430_pinctrl_suspend,
 		.resume	= exynos5430_pinctrl_resume,
+#endif
 		.label		= "exynos7580-gpio-ctrl7",
 	},
 };

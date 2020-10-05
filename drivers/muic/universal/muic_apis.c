@@ -49,7 +49,7 @@ int attach_ta(muic_data_t *pmuic)
 {
 	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 
-	if (pvendor) {
+	if (pvendor->attach_ta) {
 		pr_info("%s: ", __func__);
 		pvendor->attach_ta(pmuic->regmapdesc);
 	} else
@@ -62,7 +62,7 @@ int detach_ta(muic_data_t *pmuic)
 {
 	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 
-	if (pvendor) {
+	if (pvendor->detach_ta) {
 		pr_info("%s: ", __func__);
 		pvendor->detach_ta(pmuic->regmapdesc);
 	} else
@@ -83,13 +83,23 @@ static int get_charger_type(muic_data_t *pmuic)
 static int set_BCD_RESCAN_reg(muic_data_t *pmuic, int value)
 {
 	struct regmap_ops *pops = pmuic->regmapdesc->regmapops;
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 	int uattr, ret;
+
+	if (pvendor && pvendor->rescan) {
+		ret = pvendor->rescan(pmuic->regmapdesc, value);
+		return ret;
+	}
 
 	pops->ioctl(pmuic->regmapdesc, GET_RESID3, NULL, &uattr);
 
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5504)
+	value = !value;
+#else
 	uattr |= _ATTR_OVERWRITE_M;
-	ret = regmap_write_value(pmuic->regmapdesc, uattr, value);
+#endif
 
+	ret = regmap_write_value(pmuic->regmapdesc, uattr, value);
 	_REGMAP_TRACE(pmuic->regmapdesc, 'w', ret, uattr, value);
 
 	return ret;
@@ -151,7 +161,7 @@ int get_switch_mode(muic_data_t *pmuic)
 	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 	int val=0;
 
-	if (pvendor) {
+	if (pvendor->get_switch) {
 		pr_info("%s: ", __func__);
 		val = pvendor->get_switch(pmuic->regmapdesc);
 	} else{
@@ -165,7 +175,7 @@ void set_switch_mode(muic_data_t *pmuic, int mode)
 {
 	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 
-	if (pvendor) {
+	if (pvendor->set_switch) {
 		pr_info("%s: ", __func__);
 		pvendor->set_switch(pmuic->regmapdesc,mode);
 	} else{
@@ -179,7 +189,7 @@ int get_adc_scan_mode(muic_data_t *pmuic)
 	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 	int value = 0;
 
-	if (pvendor) {
+	if (pvendor->get_adc_scan_mode) {
 		pr_info("%s: ", __func__);
 		value = pvendor->get_adc_scan_mode(pmuic->regmapdesc);
 	} else{
@@ -193,7 +203,7 @@ void set_adc_scan_mode(muic_data_t *pmuic, const u8 val)
 {
 	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 
-	if (pvendor) {
+	if (pvendor->set_adc_scan_mode) {
 		pr_info("%s: ", __func__);
 		pvendor->set_adc_scan_mode(pmuic->regmapdesc,val);
 	} else
@@ -256,7 +266,7 @@ static int set_rustproof_mode(struct regmap_desc *pdesc, int op)
 {
 	struct vendor_ops *pvendor = pdesc->vendorops;
 
-	if (pvendor) {
+	if (pvendor->set_rustproof) {
 		pr_info("%s: %s", __func__, op ? "On" : "Off");
 		pvendor->set_rustproof(pdesc, op);
 	} else
@@ -600,6 +610,7 @@ int attach_jig_uart_boot_off(muic_data_t *pmuic, muic_attached_dev_t new_dev,
 				u8 vbvolt)
 {
 	struct muic_platform_data *pdata = pmuic->pdata;
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 
 	int ret = 0;
 
@@ -610,6 +621,9 @@ int attach_jig_uart_boot_off(muic_data_t *pmuic, muic_attached_dev_t new_dev,
 		ret = switch_to_ap_uart(pmuic);
 	else
 		ret = switch_to_cp_uart(pmuic);
+
+	if (pvendor && pvendor->set_manual_JIGON)
+		pvendor->set_manual_JIGON(pmuic->regmapdesc, 1);
 
 	/* if VBUS is enabled, call host_notify_cb to check if it is OTGTEST*/
 	if (vbvolt) {
@@ -629,9 +643,13 @@ int attach_jig_uart_boot_off(muic_data_t *pmuic, muic_attached_dev_t new_dev,
 }
 int detach_jig_uart_boot_off(muic_data_t *pmuic)
 {
+	struct vendor_ops *pvendor = pmuic->regmapdesc->vendorops;
 	int ret = 0;
 
 	pr_info("%s:%s\n", MUIC_DEV_NAME, __func__);
+
+	if (pvendor && pvendor->set_manual_JIGON)
+		pvendor->set_manual_JIGON(pmuic->regmapdesc, 0);
 
 	if(pmuic->is_rustproof) {
 		pr_info("%s:%s rustproof mode : Set Auto SW mode\n",

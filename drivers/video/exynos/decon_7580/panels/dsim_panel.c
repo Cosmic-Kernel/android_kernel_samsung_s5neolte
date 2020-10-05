@@ -15,256 +15,44 @@
 #include "../dsim.h"
 
 #include "dsim_panel.h"
-#include "dsim_backlight.h"
-#include "panel_info.h"
 
-#if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
-#include "mdnie.h"
-#if defined(CONFIG_PANEL_S6D7AA0_DYNAMIC)
-#include "mdnie_lite_table_gt58.h"
-#elif defined(CONFIG_PANEL_EA8064G_DYNAMIC)
-#include "mdnie_lite_table_s5neo.h"
+
+#if defined(CONFIG_PANEL_EA8064G_DYNAMIC)
+struct mipi_dsim_lcd_driver *mipi_lcd_driver = &ea8064g_mipi_lcd_driver;
+struct dsim_panel_ops *mipi_panel_ops = &ea8064g_panel_ops;
+#elif defined(CONFIG_PANEL_LTM184HL01)
+struct mipi_dsim_lcd_driver *mipi_lcd_driver = &ltm184hl01_mipi_lcd_driver;
+struct dsim_panel_ops *mipi_panel_ops = &ltm184hl01_panel_ops;
+#elif defined(CONFIG_PANEL_S6E3AA2_A3XE)
+struct mipi_dsim_lcd_driver *mipi_lcd_driver = &s6e3aa2_mipi_lcd_driver;
+struct dsim_panel_ops *mipi_panel_ops = &s6e3aa2_panel_ops;
+#elif defined(CONFIG_PANEL_S6E3FA3_A5XE)
+struct mipi_dsim_lcd_driver *mipi_lcd_driver = &s6e3fa3_mipi_lcd_driver;
+struct dsim_panel_ops *mipi_panel_ops = &s6e3fa3_panel_ops;
+#elif defined(CONFIG_PANEL_S6E3FA3_A7XE)
+struct mipi_dsim_lcd_driver *mipi_lcd_driver = &s6e3fa3_mipi_lcd_driver;
+struct dsim_panel_ops *mipi_panel_ops = &s6e3fa3_panel_ops;
+#elif defined(CONFIG_PANEL_EA8061_DYNAMIC)
+struct mipi_dsim_lcd_driver *mipi_lcd_driver = &ea8061_mipi_lcd_driver;
+struct dsim_panel_ops *mipi_panel_ops = &ea8061_panel_ops;
 #endif
-#endif
-
-#if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
-static int mdnie_lite_write_set(struct dsim_device *dsim, struct lcd_seq_info *seq, u32 num)
-{
-	int ret = 0, i;
-
-	for (i = 0; i < num; i++) {
-		if (seq[i].cmd) {
-			ret = dsim_write_hl_data(dsim, seq[i].cmd, seq[i].len);
-			if (ret != 0) {
-				dsim_err("%s failed.\n", __func__);
-				return ret;
-			}
-		}
-		if (seq[i].sleep)
-			usleep_range(seq[i].sleep * 1000 , seq[i].sleep * 1000);
-	}
-	return ret;
-}
-
-int mdnie_lite_send_seq(struct dsim_device *dsim, struct lcd_seq_info *seq, u32 num)
-{
-	int ret = 0;
-	struct panel_private *panel = &dsim->priv;
-
-	if (panel->state != PANEL_STATE_RESUMED) {
-		dsim_info("%s : panel is not active\n", __func__);
-		return -EIO;
-	}
-
-	mutex_lock(&panel->lock);
-	ret = mdnie_lite_write_set(dsim, seq, num);
-
-	mutex_unlock(&panel->lock);
-
-	return ret;
-}
-
-int mdnie_lite_read(struct dsim_device *dsim, u8 addr, u8 *buf, u32 size)
-{
-	int ret = 0;
-	struct panel_private *panel = &dsim->priv;
-
-	if (panel->state != PANEL_STATE_RESUMED) {
-		dsim_info("%s : panel is not active\n", __func__);
-		return -EIO;
-	}
-	mutex_lock(&panel->lock);
-	ret = dsim_read_hl_data(dsim, addr, size, buf);
-
-	mutex_unlock(&panel->lock);
-
-	return ret;
-}
-#endif
-
-static int dsim_panel_early_probe(struct dsim_device *dsim)
-{
-	int ret = 0;
-	struct panel_private *panel = &dsim->priv;
-
-	panel->ops = dsim_panel_get_priv_ops(dsim);
-
-	if (panel->ops->early_probe) {
-		ret = panel->ops->early_probe(dsim);
-	}
-	return ret;
-}
-
-static int dsim_panel_probe(struct dsim_device *dsim)
-{
-	int ret = 0;
-	struct panel_private *panel = &dsim->priv;
-#if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
-	u16 coordinate[2] = {0, };
-#endif
-	dsim->lcd = lcd_device_register("panel", dsim->dev, &dsim->priv, NULL);
-	if (IS_ERR(dsim->lcd)) {
-		dsim_err("%s : faield to register lcd device\n", __func__);
-		ret = PTR_ERR(dsim->lcd);
-		goto probe_err;
-	}
-	ret = dsim_backlight_probe(dsim);
-	if (ret) {
-		dsim_err("%s : failed to prbe backlight driver\n", __func__);
-		goto probe_err;
-	}
-
-	panel->lcdConnected = PANEL_CONNECTED;
-	panel->state = PANEL_STATE_RESUMED;
-	panel->temperature = NORMAL_TEMPERATURE;
-	panel->acl_enable = 0;
-	panel->current_acl = 0;
-	panel->auto_brightness = 0;
-	panel->siop_enable = 0;
-	panel->current_hbm = 0;
-	panel->current_vint = 0;
-	mutex_init(&panel->lock);
-#ifdef CONFIG_EXYNOS_DECON_LCD_MCD
-	panel->mcd_on = 0;
-#endif
-	if (panel->ops->probe) {
-		ret = panel->ops->probe(dsim);
-		if (ret) {
-			dsim_err("%s : failed to probe panel\n", __func__);
-			goto probe_err;
-		}
-	}
-
-#if defined(CONFIG_EXYNOS_DECON_LCD_SYSFS)
-	lcd_init_sysfs(dsim);
-#endif
-
-#if defined(CONFIG_EXYNOS_DECON_MDNIE_LITE)
-	coordinate[0] = (u16)panel->coordinate[0];
-	coordinate[1] = (u16)panel->coordinate[1];
-	mdnie_register(&dsim->lcd->dev, dsim, (mdnie_w)mdnie_lite_send_seq, (mdnie_r)mdnie_lite_read, coordinate, &tune_info);
-#endif
-probe_err:
-	return ret;
-}
-
-
-static int dsim_panel_lvds_init(struct dsim_device *dsim)
-{
-	int ret = 0;
-	struct panel_private *panel = &dsim->priv;
-
-	dsim_info("%s : lvds init, panel state (%d)\n", __func__, panel->state);
-
-	if (panel->state == PANEL_STATE_SUSPENED) {
-		panel->state = PANEL_STATE_RESUMED;
-		if (panel->ops->lvds_init) {
-			ret = panel->ops->lvds_init(dsim);
-			if (ret) {
-				dsim_err("%s : failed to lvds init\n", __func__);
-				panel->state = PANEL_STATE_SUSPENED;
-				goto lvds_init_err;
-			}
-		}
-	}
-
-lvds_init_err:
-
-	return ret;
-}
-
-static int dsim_panel_displayon(struct dsim_device *dsim)
-{
-	int ret = 0;
-	struct panel_private *panel = &dsim->priv;
-
-#ifdef CONFIG_LCD_ALPM
-	mutex_lock(&panel->alpm_lock);
-#endif
-
-	if (panel->state == PANEL_STATE_SUSPENED) {
-		panel->state = PANEL_STATE_RESUMED;
-		if (panel->ops->init) {
-			ret = panel->ops->init(dsim);
-			if (ret) {
-				dsim_err("%s : failed to panel init\n", __func__);
-				panel->state = PANEL_STATE_SUSPENED;
-				goto displayon_err;
-			}
-		}
-	}
-#ifdef CONFIG_LCD_HMT
-	if(panel->hmt_on == HMT_ON)
-		hmt_set_mode(dsim, false);
-#endif
-	dsim_panel_set_brightness(dsim, 1);
-
-	if (panel->ops->displayon) {
-		ret = panel->ops->displayon(dsim);
-		if (ret) {
-			dsim_err("%s : failed to panel display on\n", __func__);
-			goto displayon_err;
-		}
-	}
-
-displayon_err:
-#ifdef CONFIG_LCD_ALPM
-	mutex_unlock(&panel->alpm_lock);
-#endif
-	return ret;
-}
-
-static int dsim_panel_suspend(struct dsim_device *dsim)
-{
-	int ret = 0;
-	struct panel_private *panel = &dsim->priv;
-
-	if (panel->state == PANEL_STATE_SUSPENED)
-		goto suspend_err;
-
-	panel->state = PANEL_STATE_SUSPENDING;
-
-	if (panel->ops->exit) {
-		ret = panel->ops->exit(dsim);
-		if (ret) {
-			dsim_err("%s : failed to panel exit \n", __func__);
-			goto suspend_err;
-		}
-	}
-	panel->state = PANEL_STATE_SUSPENED;
-
-suspend_err:
-	return ret;
-}
-
-static int dsim_panel_resume(struct dsim_device *dsim)
-{
-	int ret = 0;
-	return ret;
-}
-
-
-static struct mipi_dsim_lcd_driver mipi_lcd_driver = {
-	.early_probe = dsim_panel_early_probe,
-	.probe		= dsim_panel_probe,
-	.displayon	= dsim_panel_displayon,
-	.suspend	= dsim_panel_suspend,
-	.resume		= dsim_panel_resume,
-	.display_lvds_init = dsim_panel_lvds_init,
-};
-
 
 int dsim_panel_ops_init(struct dsim_device *dsim)
 {
 	int ret = 0;
 
 	if (dsim)
-		dsim->panel_ops = &mipi_lcd_driver;
+		dsim->panel_ops = mipi_lcd_driver;
 
 	return ret;
 }
 
-unsigned int lcdtype = 0;
+struct dsim_panel_ops *dsim_panel_get_priv_ops(struct dsim_device *dsim)
+{
+	return mipi_panel_ops;
+}
+
+unsigned int lcdtype;
 EXPORT_SYMBOL(lcdtype);
 
 static int __init get_lcd_type(char *arg)

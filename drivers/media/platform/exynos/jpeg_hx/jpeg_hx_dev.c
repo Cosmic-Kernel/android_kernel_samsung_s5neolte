@@ -792,6 +792,9 @@ static irqreturn_t jpeg_hx_irq(int irq, void *priv)
 			jpeg->irq_ret = OK_ENC_OR_DEC;
 			break;
 		case 0x100:
+			dev_info(&jpeg->plat_dev->dev,
+				"%s: compressed result too large - retrying\n",
+				__func__);
 			jpeg->irq_ret = ERR_COMP_SIZE;
 			jpeg_hx_re_compress(ctx);
 			spin_unlock(&ctx->slock);
@@ -802,6 +805,15 @@ static irqreturn_t jpeg_hx_irq(int irq, void *priv)
 		}
 	} else {
 		jpeg->irq_ret = ERR_UNKNOWN;
+	}
+
+	if (jpeg->irq_ret !=  OK_ENC_OR_DEC) {
+		dev_err(&jpeg->plat_dev->dev, "%s: Error interrupt %#x\n",
+			__func__, int_status);
+		printk("dumping registers\n");
+		print_hex_dump(KERN_ERR, "", DUMP_PREFIX_ADDRESS, 32, 4,
+			jpeg->reg_base, 0x0280, false);
+		printk("End of JPEG_SFR DUMP\n");
 	}
 
 	clear_bit(DEV_RUN, &jpeg->state);

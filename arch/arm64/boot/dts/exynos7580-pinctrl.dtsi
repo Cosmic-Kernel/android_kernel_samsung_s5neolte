@@ -500,7 +500,7 @@
 		nfc_n5_clk_req: nfc_n5_clk_req {
 			samsung,pins = "gpc3-3";
 			samsung,pin-function = <2>;
-			samsung,pin-pud = <3>;
+			samsung,pin-pud = <1>;
 			samsung,pin-drv = <0>;
 		};
 	};
@@ -698,6 +698,13 @@
                 	samsung,pin-pud-pdn = <0>;
 			samsung,pin-val = <0>;
                 };
+
+		ese_pwr_en: ese-pwr-en {
+			samsung,pins = "gpd1-6";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <3>;
+		};
 
 		fimc_is_i2c0: fimc_is_i2c0 {
 			samsung,pins = "gpf0-1", "gpf0-0";

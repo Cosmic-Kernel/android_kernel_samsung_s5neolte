@@ -352,9 +352,23 @@
 
 	dsim_0: dsim@14800000 {
 		lcd_info = <&s6e3fa0>;
+		decon_board = <&decon_board_list>;
 		/* lcd reset, power */
-		gpios = <&gpd1 3 0x1>;
+		/* gpios = <&gpd1 3 0x1>; */
 		status = "okay";
+	};
+
+	decon_board_list: decon_board_list {
+		dsim_set_panel_power_disable {
+			type = "gpio,low", "delay,usleep";
+			gpios = <&gpd1 3 0x1>;
+			delay = <10000 11000>;
+		};
+		dsim_reset_panel {
+			type = "gpio,high", "delay,usleep", "gpio,low", "delay,usleep", "gpio,high", "delay,usleep";
+			gpios = <&gpd1 3 0x1>, <&gpd1 3 0x1>, <&gpd1 3 0x1>;
+			delay = <10000 11000>, <10000 11000>, <10000 11000>;
+		};
 	};
 
 	s6e3fa0: s6e3fa0_fhd {

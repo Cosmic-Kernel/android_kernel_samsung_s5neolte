@@ -20,6 +20,7 @@
 typedef struct sm5703_fled_platform_data {
 	unsigned int fled_flash_current;
 	unsigned int fled_movie_current;
+	unsigned int fled_torch_current;
 	struct pinctrl *fled_pinctrl;
 	struct pinctrl_state *gpio_state_active;
 	struct pinctrl_state *gpio_state_suspend;

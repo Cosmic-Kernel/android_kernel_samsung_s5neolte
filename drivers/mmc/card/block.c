@@ -61,7 +61,7 @@ MODULE_ALIAS("mmc:block");
 #define INAND_CMD38_ARG_SECERASE 0x80
 #define INAND_CMD38_ARG_SECTRIM1 0x81
 #define INAND_CMD38_ARG_SECTRIM2 0x88
-#define MMC_BLK_TIMEOUT_MS  (10 * 60 * 1000)        /* 10 minute timeout */
+#define MMC_BLK_TIMEOUT_MS  (20 * 1000)        /* 20 sec timeout */
 
 #define mmc_req_rel_wr(req)	((req->cmd_flags & REQ_FUA) && \
 				  (rq_data_dir(req) == WRITE))
@@ -1266,43 +1266,17 @@ static int mmc_blk_err_check(struct mmc_card *card,
 				return MMC_BLK_CMD_ERR;
 			}
 
-			/*
-			 * CMD25 -> CMD13 (WP violation) -> next CMD (illegal CMD)
-			 * need to change card status (rcv->tran)
-			 */
-			if ((status & R1_WP_VIOLATION) && 
-					(R1_CURRENT_STATE(status) == R1_STATE_RCV)) {
-				err = send_stop(card, &status);
-
-				pr_err("%s: WP violation. send CMD12 to "
-						"change card status (rcv->tran)\n",
-						req->rq_disk->disk_name);
-
-				/*
-				 * If the stop cmd also timed out, the card is probably
-				 * not present, so abort.  Other errors are bad news too.
-				 */
-				if (err) {
-					pr_err("%s: error %d sending stop command\n",
-							req->rq_disk->disk_name, err);
-					return MMC_BLK_ABORT;
-				}
-			}
-
 			if (status & CMD_ERRORS) {
 				pr_err("%s: command error reported, status = %#x\n",
 					req->rq_disk->disk_name, status);
-				brq->data.error = -EIO;
-				err = send_stop(card, &status);
-				if (err)
-					return MMC_BLK_ABORT;
-			}
-
-			if (status & R1_ERROR) {
-				pr_err("%s: %s: general error sending status command, card status %#x\n",
-				       req->rq_disk->disk_name, __func__,
-				       status);
-				gen_err = 1;
+				if (!(status & R1_WP_VIOLATION))
+					brq->data.error = -EIO;
+				if ((R1_CURRENT_STATE(status) == R1_STATE_RCV) ||
+					(R1_CURRENT_STATE(status) == R1_STATE_DATA)) {
+					err = send_stop(card, &status);
+					if (err)
+						return MMC_BLK_ABORT;
+				}
 			}
 
 			/* Timeout if the device never becomes ready for data
@@ -2272,17 +2246,18 @@ static int mmc_blk_issue_rq(struct mmc_queue *mq, struct request *req)
 	unsigned int cmd_flags = req ? req->cmd_flags : 0;
 	unsigned long flags;
 
-#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
-	if (mmc_bus_needs_resume(card->host))
-		mmc_resume_bus(card->host);
-#endif
 
 	if (card->ext_csd.cmdq_mode_en)
 		mmc_claim_host(card->host);
 	else {
-		if (req && !mq->mqrq_prev->req)
+		if (req && !mq->mqrq_prev->req) {
 			/* claim host only for the first request */
 			mmc_claim_host(card->host);
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+		if (mmc_bus_needs_resume(card->host))
+			mmc_resume_bus(card->host);
+#endif
+		}
 	}
 
 	ret = mmc_blk_part_switch(card, md);
@@ -2826,7 +2801,9 @@ static int mmc_blk_probe(struct mmc_card *card)
 	mmc_fixup_device(card, blk_fixups);
 
 #ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
-	mmc_set_bus_resume_policy(card->host, 1);
+	/* Deferred Resume supported for eMMC only */
+	if (card && mmc_card_mmc(card))
+		mmc_set_bus_resume_policy(card->host, 1);
 #endif
 	if (mmc_add_disk(md))
 		goto out;

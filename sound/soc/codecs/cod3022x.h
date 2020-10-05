@@ -34,6 +34,8 @@ struct cod3022x_jack_det {
 	bool mic_det;
 	bool button_det;
 	unsigned int button_code;
+	int privious_button_state;
+	int adc_val;
 	int button_state;
 };
 
@@ -66,6 +68,9 @@ struct cod3022x_priv {
 	struct switch_dev sdev;
 
 	struct input_dev *input;
+	unsigned int key_code[10];
+	unsigned int key_pressed_count;
+	struct delayed_work key_work;
 	struct mutex key_lock;
 	struct timer_list timer;
 	unsigned short i2c_addr;
@@ -75,15 +80,21 @@ struct cod3022x_priv {
 	unsigned int aifrate;
 	bool use_external_jd;
 	bool is_probe_done;
+	int mic_adc_range;
+	int mic_det_delay;
+	int btn_release_value;
 	struct jack_buttons_zone jack_buttons_zones[4];
-	struct work_struct buttons_work;
+	struct delayed_work buttons_work;
 	struct workqueue_struct *buttons_wq;
 	struct iio_channel *jack_adc;
 	unsigned int use_btn_adc_mode;
 	bool update_fw;
 	int vol_hpl;
 	int vol_hpr;
+	int adc_mix_reg_val;
 	bool use_auto_mic_power_on;
+	struct delayed_work jack_det_work;
+	struct workqueue_struct *jack_det_wq;
 /*todo.. add structure members according to the need*/
 };
 
@@ -1015,6 +1026,16 @@ struct cod3022x_priv {
 #define CTRV_JD_VTH_WIDTH	2
 #define CTRV_JD_VTH_MASK	MASK(CTRV_JD_VTH_WIDTH, CTRV_JD_VTH_SHIFT)
 
+/** COD3022_84_JACK_DET2 **/
+#define CTMD_JD_IRQ_DBNC_SHIFT	4
+#define CTMD_JD_IRQ_DBNC_WIDTH	2
+#define CTMD_JD_IRQ_DBNC_MASK	MASK(CTMD_JD_IRQ_DBNC_WIDTH, \
+					CTMD_JD_IRQ_DBNC_SHIFT)
+
+#define CTMD_JD_DBNC_SHIFT	0
+#define CTMD_JD_DBNC_WIDTH	3
+#define CTMD_JD_DBNC_MASK	MASK(CTMD_JD_DBNC_WIDTH, CTMD_JD_DBNC_SHIFT)
+
 /** COD3022X_86_DET_TIME **/
 #define CTMF_DETB_PERIOD_SHIFT	4
 #define CTMF_DETB_PERIOD_WIDTH	4
@@ -1051,6 +1072,10 @@ struct cod3022x_priv {
 #define CTMD_BTN_DBNC_3		1
 #define CTMD_BTN_DBNC_4		2
 #define CTMD_BTN_DBNC_5		3
+
+/** COD3022X_87_LDO_DIG */
+#define CTMD_JD_DBNC_4_SHIFT	6
+#define CTMD_JD_DBNC_4_MASK	BIT(CTMD_JD_DBNC_4_SHIFT)
 
 /* COD3022X_D0_CTRL_IREF1 */
 #define CTMI_VCM_SHIFT		4

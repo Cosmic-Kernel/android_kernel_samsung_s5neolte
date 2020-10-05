@@ -36,6 +36,10 @@
 #include <linux/of_device.h>
 #endif
 
+#ifdef CONFIG_BATTERY_SAMSUNG
+#include <linux/sec_batt.h>
+#endif
+
 #if IST30XX_DEBUG
 #include "ist30xxc_misc.h"
 #endif
@@ -413,7 +417,7 @@ void ist30xx_gesture_cmd(struct ist30xx_data *data, int cmd)
 #define TOUCH_UP_MESSAGE	("r")
 #define TOUCH_MOVE_MESSAGE	(" ")
 bool tsp_touched[IST30XX_MAX_MT_FINGERS] = { false, };
-void print_tsp_event(struct ist30xx_data *data, finger_info *finger)
+void print_tsp_event(struct ist30xx_data *data, finger_info *finger, u32 z_value)
 {
 	int idx = finger->bit_field.id - 1;
 	bool press;
@@ -421,15 +425,20 @@ void print_tsp_event(struct ist30xx_data *data, finger_info *finger)
 	press = PRESSED_FINGER(data->t_status, finger->bit_field.id);
 
 	if (press) {
+		input_report_key(data->input_dev, BTN_TOUCH, 1);
+		input_report_key(data->input_dev, BTN_TOOL_FINGER, 1);
 		if (tsp_touched[idx] == false) {
 			/* touch down */
 			data->touch_pressed_num++;
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-			tsp_noti("%s%d (%d, %d)(%d)\n",
+			tsp_noti("%s%d (%d, %d)(%d) fw:%x\n",
 					TOUCH_DOWN_MESSAGE, finger->bit_field.id,
-					finger->bit_field.x, finger->bit_field.y, data->z_values[idx]);
+					finger->bit_field.x, finger->bit_field.y, z_value, data->fw.cur.fw_ver);
 #else
-			tsp_noti("%s%d\n", TOUCH_DOWN_MESSAGE, finger->bit_field.id);
+			tsp_noti("%s%d fw:%x\n", TOUCH_DOWN_MESSAGE, finger->bit_field.id, data->fw.cur.fw_ver);
+#endif
+#if defined(CONFIG_INPUT_BOOSTER)
+			input_booster_send_event(BOOSTER_DEVICE_TOUCH, BOOSTER_MODE_ON);
 #endif
 			tsp_touched[idx] = true;
 		} else {
@@ -437,26 +446,33 @@ void print_tsp_event(struct ist30xx_data *data, finger_info *finger)
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 			tsp_debug("%s%d (%d, %d)(%d)\n",
 					TOUCH_MOVE_MESSAGE, finger->bit_field.id,
-					finger->bit_field.x, finger->bit_field.y, data->z_values[idx]);
+					finger->bit_field.x, finger->bit_field.y, z_value);
 #endif
 		}
 
-		data->lx = finger->bit_field.x;
-		data->ly = finger->bit_field.y;
+		data->lx[idx] = finger->bit_field.x;
+		data->ly[idx] = finger->bit_field.y;
 	} else {
 		if (tsp_touched[idx] == true) {
 			/* touch up */
 			data->touch_pressed_num--;
+			if (!data->touch_pressed_num) {
+				input_report_key(data->input_dev, BTN_TOUCH, 0);
+				input_report_key(data->input_dev, BTN_TOOL_FINGER, 0);
+#if defined(CONFIG_INPUT_BOOSTER)
+				input_booster_send_event(BOOSTER_DEVICE_TOUCH, BOOSTER_MODE_OFF);
+#endif
+			}
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
-			tsp_noti("%s%d(%d, %d)\n", TOUCH_UP_MESSAGE, finger->bit_field.id, data->lx, data->ly);
+			tsp_noti("%s%d(%d, %d)\n", TOUCH_UP_MESSAGE, finger->bit_field.id, data->lx[idx], data->ly[idx]);
 #else
 			tsp_noti("%s%d\n", TOUCH_UP_MESSAGE, finger->bit_field.id);
 
 #endif
 			tsp_touched[idx] = false;
 
-			data->lx = 0;
-			data->ly = 0;
+			data->lx[idx] = 0;
+			data->ly[idx] = 0;
 		}
 	}
 }
@@ -489,6 +505,8 @@ static void release_finger(struct ist30xx_data *data, int id)
 {
 	input_mt_slot(data->input_dev, id - 1);
 	input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, false);
+	input_report_key(data->input_dev, BTN_TOUCH, 0);
+	input_report_key(data->input_dev, BTN_TOOL_FINGER, 0);
 
 	ist30xx_tracking(TRACK_POS_FINGER + id);
 	tsp_info("%s() %d\n", __func__, id);
@@ -525,6 +543,10 @@ static void clear_input_data(struct ist30xx_data *data)
 		status >>= 1;
 		id++;
 	}
+#if defined(CONFIG_INPUT_BOOSTER)
+	input_booster_send_event(BOOSTER_DEVICE_TOUCH, BOOSTER_MODE_FORCE_OFF);
+#endif
+
 #if IST30XX_USE_KEY
 	id = 1;
 	status = PARSE_KEY_STATUS(data->t_status);
@@ -594,6 +616,7 @@ static void report_input_data(struct ist30xx_data *data, int finger_counts,
 	bool press = false;
 	finger_info *fingers = (finger_info *)data->fingers;
 	u32 *z_values = (u32 *)data->z_values;
+
 	int idx = 0;
 	u32 status;
 
@@ -605,7 +628,7 @@ static void report_input_data(struct ist30xx_data *data, int finger_counts,
 		input_mt_report_slot_state(data->input_dev, MT_TOOL_FINGER, press);
 
 		fingers[idx].bit_field.id = id + 1;
-		print_tsp_event(data, &fingers[idx]);
+		print_tsp_event(data, &fingers[idx], z_values[idx]);
 
 		if (press == false)
 			continue;
@@ -616,8 +639,11 @@ static void report_input_data(struct ist30xx_data *data, int finger_counts,
 				fingers[idx].bit_field.y);
 		input_report_abs(data->input_dev, ABS_MT_TOUCH_MAJOR,
 				fingers[idx].bit_field.area);
-		if (data->jig_mode)
+		if (data->jig_mode){
+			if(z_values[idx] < 1)
+				z_values[idx] = 1;
 			input_report_abs(data->input_dev, ABS_MT_PRESSURE, z_values[idx]);
+		}
 		idx++;
 	}
 
@@ -748,12 +774,16 @@ static irqreturn_t ist30xx_irq_thread(int irq, void *ptr)
 	}
 
 #if IST30XX_CMCS_TEST
-	if (unlikely(*msg == IST30XX_CMCS_MSG_VALID)) {
-		data->status.cmcs = 1;
-		tsp_info("cmcs status: 0x%08x\n", *msg);
+	if (((*msg & CMCS_MSG_MASK) == CM_MSG_VALID) ||
+		((*msg & CMCS_MSG_MASK) == CM2_MSG_VALID) ||
+		((*msg & CMCS_MSG_MASK) == CS_MSG_VALID) ||
+		((*msg & CMCS_MSG_MASK) == CMJIT_MSG_VALID) ||
+		((*msg & CMCS_MSG_MASK) == INT_MSG_VALID)) {
+			data->status.cmcs = *msg;
+			tsp_info("cmcs status: 0x%08x\n", *msg);
 
-		goto irq_end;
-	}
+			goto irq_end;
+		}
 #endif
 
 #if IST30XX_GESTURE
@@ -1006,6 +1036,10 @@ static int ist30xx_ts_open(struct input_dev *dev)
 			data->fw.cur.fw_ver, data->fw.cur.main_ver,
 			data->fw.cur.test_ver, data->fw.cur.core_ver);
 
+	//A3x check lcdtype
+	if((strncmp(data->dt_data->project_name, "a3x", 3) == 0))
+			tsp_info("%s lcdtype: %x \n", __func__,  lcdtype);
+
 	return 0;
 }
 
@@ -1107,6 +1141,61 @@ static void ist30xx_register_callback(struct tsp_callbacks *cb)
 {
 	charger_callbacks = cb;
 	pr_info("%s\n", __func__);
+}
+#endif
+
+#if defined(CONFIG_MUIC_NOTIFIER)
+int otg_flag = 0;
+
+static int tsp_muic_notification(struct notifier_block *nb,
+		unsigned long action, void *data)
+{
+	muic_attached_dev_t attached_dev = *(muic_attached_dev_t *)data;
+
+	switch (action) {
+	case MUIC_NOTIFY_CMD_DETACH:
+	case MUIC_NOTIFY_CMD_LOGICALLY_DETACH:
+		otg_flag = 0;
+		break;
+	case MUIC_NOTIFY_CMD_ATTACH:
+	case MUIC_NOTIFY_CMD_LOGICALLY_ATTACH:
+		if(attached_dev==ATTACHED_DEV_OTG_MUIC){
+			otg_flag = 1;
+			tsp_info("%s : otg_flag 1\n", __func__);
+		}
+		break;
+	default:
+		break;
+	}
+
+	return 0;
+}
+#endif
+
+#ifdef CONFIG_VBUS_NOTIFIER
+static int tsp_vbus_notification(struct notifier_block *nb,
+		unsigned long cmd, void *data)
+{
+	vbus_status_t vbus_type = *(vbus_status_t *)data;
+
+	tsp_info("%s cmd=%lu, vbus_type=%d\n", __func__, cmd, vbus_type);
+
+	switch (vbus_type) {
+	case STATUS_VBUS_HIGH:
+		tsp_info("%s : attach\n",__func__);
+#if defined(CONFIG_MUIC_NOTIFIER)
+		if(!otg_flag)
+#endif
+		ist30xx_set_ta_mode(true);
+		break;
+	case STATUS_VBUS_LOW:
+		tsp_info("%s : detach\n",__func__);
+		ist30xx_set_ta_mode(false);
+		break;
+	default:
+		break;
+	}
+	return 0;
 }
 #endif
 
@@ -1350,6 +1439,15 @@ static int ist30xx_parse_dt(struct device *dev, struct ist30xx_data *data)
 		tsp_info("%s() project_name: %s\n", __func__, data->dt_data->project_name);
 
 	if (data->dt_data->ic_version && data->dt_data->project_name) {
+		//A3x check lcdtype
+		if((strncmp(data->dt_data->project_name, "a3x", 3) == 0)){
+			tsp_info("%s() lcdtype: %x \n", __func__,  lcdtype);
+			data->lcd_id = lcdtype & 0x0000ff;	//lcdtype 400002
+			if(data->lcd_id < 0x02){
+				data->dt_data->project_name = "a3x_rev0";
+			}
+		}
+		
 		snprintf(data->dt_data->fw_path, FIRMWARE_PATH_LENGTH,
 				"%s%s_%s.fw", FIRMWARE_PATH,
 				data->dt_data->ic_version, data->dt_data->project_name);
@@ -1361,12 +1459,14 @@ static int ist30xx_parse_dt(struct device *dev, struct ist30xx_data *data)
 		tsp_info("%s() cmcs bin path: %s\n", __func__, data->dt_data->cmcs_path);
 	}
 
+	if (of_property_read_u32(np, "imagis,octa-hw",	&data->dt_data->octa_hw) >= 0)
+		tsp_info("%s() octa-hw: %d\n", __func__, data->dt_data->octa_hw);
+
 	rc = of_property_read_string(np, "vdd_ldo_name", &data->dt_data->tsp_vdd_name);
 	if (rc < 0)
 		tsp_err("%s: Unable to read TSP ldo name\n", __func__);
 
-	tsp_info("%s() irq:%d, touch_en:%d, tsp_ldo: %s\n",
-			__func__, data->dt_data->irq_gpio, data->dt_data->tsp_vdd_name);
+	tsp_info("%s irq:%d\n",__func__, data->dt_data->irq_gpio);
 
 	return 0;
 }
@@ -1381,7 +1481,11 @@ static int ist30xx_set_input_device(struct ist30xx_data *data)
 {
 	int ret;
 
+	set_bit(EV_SYN, data->input_dev->evbit);
 	set_bit(EV_ABS, data->input_dev->evbit);
+
+	set_bit(BTN_TOUCH, data->input_dev->keybit);
+	set_bit(BTN_TOOL_FINGER, data->input_dev->keybit);
 	set_bit(INPUT_PROP_DIRECT, data->input_dev->propbit);
 
 	input_set_abs_params(data->input_dev, ABS_MT_POSITION_X,
@@ -1390,6 +1494,7 @@ static int ist30xx_set_input_device(struct ist30xx_data *data)
 			0, data->max_y - 1, 0, 0);
 
 	input_set_abs_params(data->input_dev, ABS_MT_TOUCH_MAJOR, 0, IST30XX_MAX_W, 0, 0);
+
 #ifdef CONFIG_SEC_FACTORY
 	input_set_abs_params(data->input_dev, ABS_MT_PRESSURE, 0, 0x1000, 0, 0);
 #endif
@@ -1430,6 +1535,7 @@ static int ist30xx_probe(struct i2c_client *client,
 	int ret;
 	int retry = 3;
 	u32 xy_res;
+	u32 xy_swap;
 
 	struct ist30xx_data *data;
 	struct input_dev *input_dev;
@@ -1584,9 +1690,17 @@ static int ist30xx_probe(struct i2c_client *client,
 #endif /* IST30XX_UPDATE_BY_WORKQUEUE */
 #endif /* IST30XX_INTERNAL_BIN */
 
+	ret = ist30xx_read_cmd(data, IST30XX_REG_XY_SWAP, &xy_swap);
+	tsp_err("%s: ret:%d, swap:%x\n", __func__, ret, xy_swap & 0x01);
+
 	ret = ist30xx_read_cmd(data, IST30XX_REG_XY_RES, &xy_res);
+	if (xy_swap & 0x01) {                                                                    // modify code
+		data->max_x = (u16)(xy_res & 0xFFFF);
+		data->max_y = (u16)(xy_res >> 16);
+	} else {
 	data->max_x = (u16)(xy_res >> 16);
 	data->max_y = (u16)(xy_res & 0xFFFF);
+	}
 	tsp_err("%s: ret:%d, xy:%X, x:%d, y:%d\n", __func__, ret, xy_res, data->max_x, data->max_y);
 
 	ret = ist30xx_set_input_device(data);
@@ -1654,6 +1768,14 @@ static int ist30xx_probe(struct i2c_client *client,
 #ifdef USE_TSP_TA_CALLBACKS
 	data->callbacks.inform_charger = charger_enable;
 	ist30xx_register_callback(&data->callbacks);
+#endif
+#if defined(CONFIG_MUIC_NOTIFIER)
+	muic_notifier_register(&data->muic_nb, tsp_muic_notification,
+			MUIC_NOTIFY_DEV_CHARGER);
+#endif
+#ifdef CONFIG_VBUS_NOTIFIER
+		vbus_notifier_register(&data->vbus_nb, tsp_vbus_notification,
+			       VBUS_NOTIFY_DEV_CHARGER);
 #endif
 	data->initialized = true;
 
@@ -1750,7 +1872,7 @@ static struct of_device_id ist30xx_match_table[] = {
 #define ist30xx_match_table NULL
 #endif
 
-#ifndef CONFIG_HAS_EARLYSUSPEND
+#if !defined(CONFIG_HAS_EARLYSUSPEND) && !defined(USE_OPEN_CLOSE)
 static const struct dev_pm_ops ist30xx_pm_ops = {
 	.suspend	= ist30xx_suspend,
 	.resume		= ist30xx_resume,
@@ -1766,7 +1888,7 @@ static struct i2c_driver ist30xx_i2c_driver = {
 		.owner		= THIS_MODULE,
 		.name		= IST30XX_DEV_NAME,
 		.of_match_table = ist30xx_match_table,
-#ifndef CONFIG_HAS_EARLYSUSPEND
+#if !defined(CONFIG_HAS_EARLYSUSPEND) && !defined(USE_OPEN_CLOSE)
 		.pm		= &ist30xx_pm_ops,
 #endif
 	},
@@ -1775,6 +1897,13 @@ static struct i2c_driver ist30xx_i2c_driver = {
 static int __init ist30xx_init(void)
 {
 	tsp_info("%s()\n", __func__);
+#ifdef CONFIG_BATTERY_SAMSUNG
+	if (lpcharge == 1) {
+		tsp_info("%s : Do not load driver due to : lpm %d\n",
+			 __func__, lpcharge);
+		return 0;
+	}
+#endif
 	return i2c_add_driver(&ist30xx_i2c_driver);
 }
 

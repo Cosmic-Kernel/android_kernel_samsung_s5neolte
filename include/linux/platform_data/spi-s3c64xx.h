@@ -144,6 +144,8 @@ struct s3c64xx_spi_driver_data {
 
 	int is_probed;
 	int spi_clkoff_time;
+	char *spiclk_pindev_name;
+	char *spiclk_pin_name;
 };
 
 /**

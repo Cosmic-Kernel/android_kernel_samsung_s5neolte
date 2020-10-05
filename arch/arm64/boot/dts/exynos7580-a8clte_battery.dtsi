@@ -62,19 +62,19 @@
 		battery0,battery_type = <4350>; /* 4200 4350 4400 */
 		battery0,battery_table0 = <0x1400 0x1B33 0x1C9B 0x1D60 0x1D83 0x1DD4 0x1E12 0x1E73 0x1ECA 0x1F09 0x1F78 0x1FD5 0x2090 0x20F8 0x22CC 0x2400>;
 		battery0,battery_table1 = <0x1400 0x1B33 0x1C9B 0x1D60 0x1D83 0x1DD4 0x1E12 0x1E73 0x1ECA 0x1F09 0x1F78 0x1FD5 0x2090 0x20F8 0x22CC 0x2400>;
-		battery0,battery_table2 = <0x00 0x38 0x9C 0x138 0x271 0x445 0x61A 0x9C2 0xC33 0xD6B 0xEA4 0xFDC 0x124C 0x1385 0x1866 0x186C>;
+		battery0,battery_table2 = <0x00 0x38 0x5E 0xBB 0x1F4 0x3A9 0x57D 0x926 0xB97 0xCCF 0xE07 0xF40 0x11B0 0x12E9 0x1866 0x186C>;
 		battery0,temp_std = <25>;
 		battery0,temp_offset = <10>;
 		battery0,temp_offset_cal = <0x01>;
-		battery0,charge_offset_cal = <(-0x15)>;
+		battery0,charge_offset_cal = <(-0x0d)>;
 		battery0,rce_value = <0x0749 0x0580 0x371>;
 		battery0,dtcd_value = <0x1>;
 		battery0,rs_value = <0x1ae 0x47a 0x3800 0x00a4>; /*rs mix_factor max min*/
 		battery0,vit_period = <0x350a>;
-		battery0,mix_value = <0x0a03 0x0004>; /*mix_rate init_blank*/
-		battery0,topoff_soc = <0x1 0x101>; /*enable soc*/
+		battery0,mix_value = <0x0503 0x0004>; /*mix_rate init_blank*/
+		battery0,topoff_soc = <0x0 0x5>; /*enable soc*/
 		battery0,volt_cal = <0x8000>;
-		battery0,curr_cal = <0x8100>;
+		battery0,curr_cal = <0x7c00>;
 	};
 
 	battery {
@@ -110,14 +110,14 @@
 					(-10) (-20) (-30) (-40) (-50) (-60) (-70) (-80) (-90) (-100) (-150)>;
 
 
-		battery,input_current_limit = <1750 0 0 1800 500 900 1000 500 1000 0 760 1900 1800 0 0 400 700 1300 300 1000 1600>;
-		battery,fast_charging_current = <2100 0 0 2100 750 1200 1000 750 1200 0 900 1600 2100 0 0 400 700 1300 300 1000 1900>;
-		battery,full_check_current_1st = <200 0 0 200 200 200 200 200 200 0 200 200 200 0 0 200 200 200 200 200 200>;
-		battery,full_check_current_2nd = <2400 0 0 2400 2400 2400 2400 2400 2400 0 2400 2400 2400 0 0 2400 2400 2400 2400 2400 2400>;
+		battery,input_current_limit = <1750 0 0 1750 500 900 1000 500 1000 0 760 1900 1800 0 1400 400 700 1300 300 1000 1600>;
+		battery,fast_charging_current = <2100 0 0 2100 750 1200 1000 750 1200 0 900 1600 2100 0 1400 400 700 1300 300 1000 1900>;
+		battery,full_check_current_1st = <200 0 0 200 200 200 200 200 200 0 200 200 200 0 200 200 200 200 200 200 200>;
+		battery,full_check_current_2nd = <2400 0 0 2400 2400 2400 2400 2400 2400 0 2400 2400 2400 0 2400 2400 2400 2400 2400 2400 2400>;
 
 		battery,inbat_voltage = <1>;
-		battery,inbat_voltage_table_adc = <3120 3101 3061 3038 3001 2956 2920 2887 2856 2814
-						2793 2754 2720 2677 2641 2613 2572 2531 2502 2467 2436>;
+		battery,inbat_voltage_table_adc = <2661 2620 2600 2586 2566 2536 2513 2486 2461 2431
+						2403 2373 2360 2334 2301 2273 2245 2224 2200 2167 2137>;
 		battery,inbat_voltage_table_data = <438 435 430 425 420 415 410 405 400 395
 						390 385 380 375 370 365 360 355 350 345 340>;
 
@@ -187,7 +187,7 @@
 		#io-channel-cells = <1>;
 		io-channel-ranges;
 
-		battery,chg_float_voltage = <4400>;
+		battery,chg_float_voltage = <4390>;
 
 		battery,self_discharging_en;
 		battery,force_discharging_limit = <650>;
@@ -221,19 +221,17 @@
 			pinctrl-0 = <&chg_en &if_irq>;
 			sm5703,irq-gpio = <&gpa0 5 0>;
 			//sm5703,mrstb-gpio = <&gpa3 7 0>;
-			/*
-			sm5703_fled {
-				compatible = "siliconmitus,sm5703-fled";
-				enable = <1 1>;
-				flash_current = <1000>;
-				movie_current = <100>;
-				sm5703,led1-gpio = <&gpc0 1 0>;
-				sm5703,led2-gpio = <&gpc0 2 0>;
-				pinctrl-names = "fled_default","fled_sleep";
-				pinctrl-0 = <&fled_flash_active>;
-				pinctrl-1 = <&fled_flash_sleep>;
+
+			sm5703_ldo1 {
+				compatible = "siliconmitus,sm5703-ldo1";
+				regulator-name = "VDDAF_2.8V_CAM"; /* change name by yourself */
+				regulator-min-microvolt = <2750000>;
+				regulator-max-microvolt = <2800000>; /* max == min then apply_uV = 1 */
+				/* regulator-microvolt-offset = < >; optional*/
+				/* regulator-boot-on;*/ /* = "yes"; optional, exist = enabled */
+				/* regulator-always-on;*/ /* = "yes"; optional, exist = enabled */
+				/* regulator-ramp-delay = <100>; optional*/
 			};
-			*/
 
 			sm5703_ldo3 {
 				compatible = "siliconmitus,sm5703-ldo3";
@@ -244,6 +242,29 @@
 				/* regulator-boot-on = "yes"; optional, exist = enabled */
 				/* regulator-always-on = "yes"; optional, exist = enabled */
 				/* regulator-ramp-delay = <100>; optional*/
+			};
+
+			sm5703_buck {
+				compatible = "siliconmitus,sm5703-buck";
+				regulator-name = "VDD_CAM_DVDD_1P2"; /* change name by yourself */
+				regulator-min-microvolt = <1200000>;
+				regulator-max-microvolt = <1200000>; /* max == min then apply_uV = 1 */
+				/* regulator-microvolt-offset = < >; optional*/
+				/* regulator-boot-on = "yes"; optional, exist = enabled */
+				/* regulator-always-on = "yes"; optional, exist = enabled */
+				/* regulator-ramp-delay = <100>; optional*/
+			};
+
+			sm5703_fled {
+				compatible = "siliconmitus,sm5703-fled";
+				enable = <1 1>;
+				flash_current = <1200>;
+				movie_current = <150>;
+				sm5703,led1-gpio = <&gpe0 1 0>;
+				sm5703,led2-gpio = <&gpe0 2 0>;
+				pinctrl-names = "fled_default","fled_sleep";
+				pinctrl-0 = <&fled_flash_active>;
+				pinctrl-1 = <&fled_flash_sleep>;
 			};
 		};
 	};
@@ -258,11 +279,11 @@
 		battery,chg_polarity_en = <0>;
 		battery,chg_gpio_status = <0>;
 		battery,chg_polarity_status = <0>;
-		battery,chg_float_voltage = <4400>;
+		battery,chg_float_voltage = <4390>;
 		chg_autostop = <0>;
-		chg_autoset = <0>;
-		chg_aiclen = <0>;
-		chg_aiclth = <4500>;
+		chg_autoset = <1>;
+		chg_aiclen = <1>;
+		chg_aiclth = <4300>;
 		fg_vol_val = <4350>;
 		fg_soc_val = <95>;
 		fg_curr_avr_val = <150>;

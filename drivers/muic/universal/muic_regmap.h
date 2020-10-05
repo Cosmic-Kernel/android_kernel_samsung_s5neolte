@@ -56,6 +56,16 @@ struct reg_attr;
 
 #define _ATTR_OVERWRITE_M   (1 << 20)
 
+/* Interrupt type */
+enum {
+	INT_REQ_ATTACH = 1<<0,
+	INT_REQ_DETACH = 1<<1,
+	INT_REQ_OVP = 1<<2,
+	INT_REQ_RESET = 1<<3,
+	INT_REQ_DONE = 1<<4,
+	INT_REQ_DISCARD = 1<<5,
+};
+
 struct reg_attr {
 	u8 value;
 	u8 bitn;
@@ -92,9 +102,22 @@ struct vendor_ops {
 	void (*set_adc_scan_mode)(struct regmap_desc  *, int);
 	int (*get_adc_scan_mode)(struct regmap_desc  *);
 	int (*set_rustproof)(struct regmap_desc  *, int);
+	int (*set_manual_JIGON)(struct regmap_desc  *, int);
 	int (*get_vps_data)(struct regmap_desc *, void *);
 	int (*muic_enable_accdet)(struct regmap_desc *);
 	int (*muic_disable_accdet)(struct regmap_desc *);
+	int (*rescan)(struct regmap_desc *, int);
+};
+
+struct afc_ops {
+	int (*afc_init)(struct regmap_desc  *);
+	int (*afc_ta_attach)(struct regmap_desc  *);
+	int (*afc_ta_accept)(struct regmap_desc  *);
+	int (*afc_vbus_update)(struct regmap_desc  *);
+	int (*afc_multi_byte)(struct regmap_desc  *);
+	int (*afc_error)(struct regmap_desc  *);
+	int (*afc_ctrl_reg)(struct regmap_desc  *, int, bool);
+	int (*afc_init_check)(struct regmap_desc  *);
 };
 
 struct regmap_desc {
@@ -104,6 +127,7 @@ struct regmap_desc {
 	int trace;
 	struct regmap_ops *regmapops;
 	struct vendor_ops *vendorops;
+	struct afc_ops *afcops;
 	muic_data_t *muic;
 };
 

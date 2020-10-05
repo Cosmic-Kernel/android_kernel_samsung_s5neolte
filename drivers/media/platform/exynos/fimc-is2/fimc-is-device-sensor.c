@@ -49,6 +49,10 @@
 #ifdef CONFIG_USE_VENDER_FEATURE
 #include "fimc-is-sec-define.h"
 #endif
+#if defined(CONFIG_LEDS_SM5705)
+#include <linux/leds/leds-sm5705.h>
+bool fled_prepared = false;
+#endif
 
 extern struct device *camera_front_dev;
 extern struct device *camera_rear_dev;
@@ -1247,6 +1251,13 @@ int fimc_is_sensor_open(struct fimc_is_device_sensor *device,
 		goto p_err;
 	}
 
+#if defined (CONFIG_LEDS_SM5705)
+	if (device->position == SENSOR_POSITION_REAR) {
+		sm5705_fled_prepare_flash(SM5705_FLED_0);
+		fled_prepared = true;
+	}
+#endif
+
 #ifdef ENABLE_DTP
 	device->dtp_check = true;
 #endif
@@ -1307,6 +1318,13 @@ int fimc_is_sensor_close(struct fimc_is_device_sensor *device)
 	ret = fimc_is_resource_put(device->resourcemgr, device->instance);
 	if (ret)
 		merr("fimc_is_resource_put is fail", device);
+
+#if defined (CONFIG_LEDS_SM5705)
+	if ((device->position == SENSOR_POSITION_REAR) || fled_prepared) {
+		sm5705_fled_close_flash(SM5705_FLED_0);
+		fled_prepared = false;
+	}
+#endif
 
 	clear_bit(FIMC_IS_SENSOR_OPEN, &device->state);
 	clear_bit(FIMC_IS_SENSOR_S_INPUT, &device->state);

@@ -556,6 +556,7 @@
 			pinctrl-0 = <&muic_irq>;
 			muic,muic_int = <&gpa1 3 0>;
 			gpios = <&gpd2 2 0>;
+			muic,undefined_range;
 		};
 	};
 
@@ -620,7 +621,11 @@
 			cm36655,default_low_thd = <13>;
 			cm36655,cancel_hi_thd = <10>;
 			cm36655,cancel_low_thd = <7>;
-			cm36655,trim = <0x0003>;
+			cm36655,cal_skip_adc=<8>;
+			cm36655,cal_fail_adc=<18>;
+			cm36655,als_reg_set=<0x0000>;
+			cm36655,ps_conf1=<0x7308>;
+			cm36655,default_trim = <0x0003>;
 		};
 	};
 
@@ -1283,11 +1288,32 @@
 
 	dsim_0: dsim@14800000 {
 		lcd_info = <&ea8064g>;
+		decon_board = <&decon_board_list>;
 		/* lcd reset, power */
-		gpios = <&gpd1 3 0x1>, <&gpd1 1 0x1>;
-		lcd_vdd = "LCD_3P0";
-		lcd_vdd_2 = "LCD_1P8";
+		/* gpios = <&gpd1 3 0x1>, <&gpd1 1 0x1>; */
+		/* lcd_vdd = "LCD_3P0"; */
+		/* lcd_vdd_2 = "LCD_1P8"; */
 		status = "okay";
+	};
+
+	decon_board_list: decon_board_list {
+		dsim_set_panel_power_enable {
+			type = "regulator,enable", "regulator,enable", "gpio,high", "delay,usleep", "pinctrl,turnon_tes";
+			gpios = <&gpd1 1 0x1>;
+			delay = <10000 11000>;
+			regulator = "LCD_3P0", "LCD_1P8";
+		};
+		dsim_set_panel_power_disable {
+			type = "gpio,low", "delay,usleep", "gpio,low", "delay,usleep", "pinctrl,turnoff_tes", "regulator,disable", "delay,usleep", "regulator,disable";
+			gpios = <&gpd1 3 0x1>, <&gpd3 1 0x1>;
+			delay = <10000 11000>, <5000 6000>, <5000 6000>;
+			regulator = "LCD_1P8", "LCD_3P0";
+		};
+		dsim_reset_panel {
+			type = "gpio,high", "delay,usleep", "gpio,low", "delay,usleep", "gpio,high", "delay,usleep";
+			gpios = <&gpd1 3 0x1>, <&gpd1 3 0x1>, <&gpd1 3 0x1>;
+			delay = <10000 11000>, <10000 11000>, <10000 11000>;
+		};
 	};
 
 	ea8064g: ea8064g_fhd {
@@ -1467,7 +1493,7 @@
 	};
 
 	bluetooth {
-		compatible = "broadcom,bcm43455";
+		compatible = "broadcom,bcm43xx";
 		gpios = <&gpc4 2 0x1	/*BT_EN*/
 				&gpa2 2 0x1	/*BT_WAKE*/
 				&gpa2 6 0xF	/*BT_HOST_WAKE*/ >;
@@ -1870,14 +1896,8 @@
 			samsung,pin-pud = <0>;
 			samsung,pin-val = <0>;
 		};
-	};	
-		pinctrl@139B0000 {
-		hrm_int: hrm-int {
-			samsung,pins = "gpa1-4";
-			samsung,pin-function = <0xf>;
-			samsung,pin-pud = <1>;
-		};
 	};
+
 	sec_thermistor@0 {
 		compatible = "samsung,sec-ap-thermistor";
 		status = "okay";

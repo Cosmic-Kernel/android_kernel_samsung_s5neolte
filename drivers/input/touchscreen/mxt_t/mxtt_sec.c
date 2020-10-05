@@ -527,6 +527,8 @@ out:
 	release_firmware(fw);
 	kfree(fw_data);
 
+	mxt_print_ic_version(data);
+
 	if (ret) {
 		snprintf(buff, sizeof(buff), "FAIL");
 		set_cmd_result(fdata, buff, strnlen(buff, sizeof(buff)));
@@ -715,8 +717,6 @@ static void get_config_ver(void *device_data)
 
 	char buff[50] = {0};
 	char date[10] = {0};
-	int error = 0;
-	u32 current_crc = 0;
 
 	set_default_result(fdata);
 
@@ -733,16 +733,11 @@ static void get_config_ver(void *device_data)
 	mxt_read_mem(data, user_object->start_address,
 			MXT_CONFIG_VERSION_LENGTH, date);
 
-	disable_irq(data->client->irq);
-	/* Get config CRC from device */
-	error = mxt_read_config_crc(data, &current_crc);
-	if (error)
-		tsp_debug_err(true, &client->dev, "%s Error getting configuration CRC:%d\n",
-			__func__, error);
-	enable_irq(data->client->irq);
-
 	/* Model number_vendor_date_CRC value */
-	snprintf(buff, sizeof(buff), "%s_AT_%s", data->pdata->model_name, date);
+	snprintf(buff, sizeof(buff), "%s_AT%s%s_%s", data->pdata->model_name,
+									data->pdata->paneltype == NULL ? "" : "_",
+									data->pdata->paneltype == NULL ? "" : data->pdata->paneltype,
+									date);
 
 	set_cmd_result(fdata, buff, strnlen(buff, sizeof(buff)));
 	fdata->cmd_state = CMD_STATUS_OK;
@@ -867,6 +862,56 @@ static void module_on_master(void *device_data)
 
 	tsp_debug_info(true, &client->dev, "%s: %s\n", __func__, buff);
 
+}
+
+static void dead_zone_enable(void *device_data)
+{
+	struct mxt_data *data = (struct mxt_data *)device_data;
+	struct i2c_client *client = data->client;
+	struct mxt_fac_data *fdata = data->fdata;
+
+	char buff[16] = {0};
+	int ret = 1;
+	set_default_result(fdata);
+
+	if (fdata->cmd_param[0] < 0 || fdata->cmd_param[0] > 2) {
+		snprintf(buff, sizeof(buff), "NG");
+		fdata->cmd_state = CMD_STATUS_FAIL;
+		goto out;
+	}
+
+	tsp_debug_info(true, &client->dev, "%s: Set dead_zone[%d]",
+										__func__, fdata->cmd_param[0]);
+
+	/* 0 : Disable dead Zone for factory app : mxt_patch_test_event(data, 4)
+	 * 1 : Enable dead Zone (default)           : mxt_patch_test_event(data, 3) */
+	if (fdata->cmd_param[0] == 0) {
+		ret = mxt_patch_test_event(data, 4);
+
+	} else if (fdata->cmd_param[0] == 1) {
+		ret = mxt_patch_test_event(data, 3);
+	}
+	if (ret){
+		tsp_debug_err(true, &client->dev, "%s: fail to set dead_zone[%d]",
+											__func__, fdata->cmd_param[0]);
+		snprintf(buff, sizeof(buff), "NG");
+		fdata->cmd_state = CMD_STATUS_FAIL;
+		goto out;
+	}
+
+	snprintf(buff, sizeof(buff), "OK");
+	fdata->cmd_state = CMD_STATUS_OK;
+
+out:
+	set_cmd_result(fdata, buff, strnlen(buff, sizeof(buff)));
+
+	mutex_lock(&fdata->cmd_lock);
+	fdata->cmd_is_running = false;
+	mutex_unlock(&fdata->cmd_lock);
+
+	fdata->cmd_state = CMD_STATUS_WAITING;
+	tsp_debug_info(true, &client->dev, "%s: %s(%d)\n",
+		__func__, buff, (int)strnlen(buff, sizeof(buff)));
 }
 
 static void get_chip_vendor(void *device_data)
@@ -1379,6 +1424,7 @@ static struct tsp_cmd tsp_cmds[] = {
 	{TSP_CMD("module_off_slave", not_support_cmd),},
 	{TSP_CMD("module_on_slave", not_support_cmd),},
 	{TSP_CMD("get_chip_vendor", get_chip_vendor),},
+	{TSP_CMD("dead_zone_enable", dead_zone_enable),},
 	{TSP_CMD("get_chip_name", get_chip_name),},
 	{TSP_CMD("get_x_num", get_x_num),},
 	{TSP_CMD("get_y_num", get_y_num),},

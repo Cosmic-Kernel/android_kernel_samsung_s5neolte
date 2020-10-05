@@ -406,13 +406,15 @@ bool s2mu003_fuelgauge_fuelalert_init(struct i2c_client *client, int soc)
 	/*Enable VBAT, SOC */
 	data[1] &= 0xfc;
 
-	/*Disable IDLE_ST, INIT)ST */
+	/*Disable IDLE_ST, INIT_ST */
 	data[1] |= 0x0c;
 
 	s2mu003_write_reg(client, S2MU003_REG_IRQ, data);
 
 	dev_dbg(&client->dev, "%s: irq_reg(%02x%02x) irq(%d)\n",
 			__func__, data[1], data[0], fuelgauge->pdata->fg_irq);
+
+	fuelgauge->is_fuel_alerted = false;
 
 	return true;
 }
@@ -458,10 +460,10 @@ static int s2mu003_fg_get_property(struct power_supply *psy,
 		/* Additional Voltage Information (mV) */
 	case POWER_SUPPLY_PROP_VOLTAGE_AVG:
 		switch (val->intval) {
-			case SEC_BATTEY_VOLTAGE_AVERAGE:
+			case SEC_BATTERY_VOLTAGE_AVERAGE:
 				val->intval = s2mu003_get_avgvbat(fuelgauge);
 				break;
-			case SEC_BATTEY_VOLTAGE_OCV:
+			case SEC_BATTERY_VOLTAGE_OCV:
 				val->intval = s2mu003_get_ocv(fuelgauge);
 				break;
 		}
@@ -599,6 +601,48 @@ static int s2mu003_fg_set_property(struct power_supply *psy,
 	return 0;
 }
 
+static void s2mu003_fg_isr_work(struct work_struct *work)
+{
+
+	struct s2mu003_fuelgauge_data *fuelgauge =
+		container_of(work, struct s2mu003_fuelgauge_data, isr_work.work);
+	u8 fg_alert_status[2];
+	int ret;
+
+	ret = s2mu003_read_reg(fuelgauge->i2c, S2MU003_REG_IRQ, fg_alert_status);
+	if (ret < 0)
+		dev_err(&fuelgauge->i2c->dev, "%s: Error(%d)\n", __func__, ret);
+
+	dev_info(&fuelgauge->i2c->dev, "%s: irq_reg(%02x%02x) irq(%d)\n",
+			__func__, fg_alert_status[1], fg_alert_status[0], fuelgauge->pdata->fg_irq);
+
+	fg_alert_status[0] &= 0x03;
+	if (fg_alert_status[0]) {
+		wake_unlock(&fuelgauge->fuel_alert_wake_lock);
+	}
+
+	if (fg_alert_status[0] & S2MU003_VBAT_L) {
+		pr_info("%s : Battery Voltage is Very Low!!\n", __func__);
+	} else if (fg_alert_status[0] & S2MU003_SOC_L) {
+		pr_info("%s : SOC is Very Low!!\n", __func__);
+	}
+}
+
+static irqreturn_t s2mu003_fg_irq_thread(int irq, void *irq_data)
+{
+	struct s2mu003_fuelgauge_data *fuelgauge = irq_data;
+
+	dev_info(&fuelgauge->i2c->dev, "%s: FG ALRTB IRQ!! \n",	__func__);
+
+	if (!fuelgauge->is_fuel_alerted) {
+		wake_lock(&fuelgauge->fuel_alert_wake_lock);
+		fuelgauge->is_fuel_alerted = true;
+		schedule_delayed_work(&fuelgauge->isr_work, 0);
+	}
+	return IRQ_HANDLED;
+}
+
+
 #ifdef CONFIG_OF
 static int s2mu003_fuelgauge_parse_dt(struct s2mu003_fuelgauge_data *fuelgauge)
 {
@@ -611,6 +655,11 @@ static int s2mu003_fuelgauge_parse_dt(struct s2mu003_fuelgauge_data *fuelgauge)
 	if (np == NULL) {
 		pr_err("%s np NULL\n", __func__);
 	} else {
+		fuelgauge->pdata->fg_irq = of_get_named_gpio(np, "fuelgauge,fuel_alert", 0);
+		if (fuelgauge->pdata->fg_irq < 0)
+			pr_err("%s error reading fg_irq = %d\n",
+				__func__, fuelgauge->pdata->fg_irq);
+
 		ret = of_property_read_u32(np, "fuelgauge,capacity_max",
 				&fuelgauge->pdata->capacity_max);
 		if (ret < 0)
@@ -757,11 +806,51 @@ static int s2mu003_fuelgauge_probe(struct i2c_client *client,
 		goto err_data_free;
 	}
 
+	if (fuelgauge->pdata->fuel_alert_soc >= 0) {
+		s2mu003_fuelgauge_fuelalert_init(fuelgauge->i2c,
+					fuelgauge->pdata->fuel_alert_soc);
+		wake_lock_init(&fuelgauge->fuel_alert_wake_lock,
+					WAKE_LOCK_SUSPEND, "fuel_alerted");
+
+		if (fuelgauge->pdata->fg_irq > 0) {
+			INIT_DELAYED_WORK(
+					&fuelgauge->isr_work, s2mu003_fg_isr_work);
+
+			fuelgauge->fg_irq = gpio_to_irq(fuelgauge->pdata->fg_irq);
+			dev_info(&client->dev,
+					"%s: fg_irq = %d\n", __func__, fuelgauge->fg_irq);
+			if (fuelgauge->fg_irq > 0) {
+				ret = request_threaded_irq(fuelgauge->fg_irq,
+						NULL, s2mu003_fg_irq_thread,
+						IRQF_TRIGGER_FALLING | IRQF_TRIGGER_RISING
+						| IRQF_ONESHOT,
+						"fuelgauge-irq", fuelgauge);
+				if (ret) {
+					dev_err(&client->dev,
+							"%s: Failed to Reqeust IRQ\n", __func__);
+					goto err_supply_unreg;
+				}
+
+				ret = enable_irq_wake(fuelgauge->fg_irq);
+				if (ret < 0)
+					dev_err(&client->dev,
+							"%s: Failed to Enable Wakeup Source(%d)\n",
+							__func__, ret);
+			} else {
+				dev_err(&client->dev, "%s: Failed gpio_to_irq(%d)\n",
+						__func__, fuelgauge->fg_irq);
+				goto err_supply_unreg;
+			}
+		}
+	}
+
 	fuelgauge->initial_update_of_soc = true;
 
 	pr_info("%s: S2MU003 Fuelgauge Driver Loaded\n", __func__);
 	return 0;
 
+err_supply_unreg:
+	power_supply_unregister(&fuelgauge->psy_fg);
 err_data_free:
 	if (client->dev.of_node)
 		kfree(fuelgauge->pdata);

@@ -41,6 +41,8 @@
 #define S2MU003_REG_RBATZ1		0x16
 #define S2MU003_REG_IRQ_LVL		0x18
 #define S2MU003_REG_START		0x1A
+#define S2MU003_VBAT_L			0x01
+#define S2MU003_SOC_L			0x02
 
 struct sec_fg_info {
 	/* test print count */
@@ -81,37 +83,37 @@ struct s2mu003_platform_data {
 };
 
 struct s2mu003_fuelgauge_data {
-        struct device           *dev;
-        struct i2c_client       *i2c;
-        struct i2c_client       *pmic;
-        struct mutex            fuelgauge_mutex;
-        struct s2mu003_platform_data *pdata;
-        struct power_supply	psy_fg;
-        /* struct delayed_work isr_work; */
+	struct device           *dev;
+	struct i2c_client       *i2c;
+	struct i2c_client       *pmic;
+	struct mutex            fuelgauge_mutex;
+	struct s2mu003_platform_data *pdata;
+	struct power_supply	psy_fg;
+	struct delayed_work isr_work;
 
-        int cable_type;
-        bool is_charging;
+	int cable_type;
+	bool is_charging;
 
-        /* HW-dedicated fuel guage info structure
-         * used in individual fuel gauge file only
-         * (ex. dummy_fuelgauge.c)
-         */
-        struct sec_fg_info      info;
-        bool is_fuel_alerted;
-        struct wake_lock fuel_alert_wake_lock;
+	/* HW-dedicated fuel guage info structure
+	 * used in individual fuel gauge file only
+	 * (ex. dummy_fuelgauge.c)
+	 */
+	struct sec_fg_info      info;
+	bool is_fuel_alerted;
+	struct wake_lock fuel_alert_wake_lock;
 
-        unsigned int capacity_old;      /* only for atomic calculation */
-        unsigned int capacity_max;      /* only for dynamic calculation */
-        unsigned int standard_capacity;
+	unsigned int capacity_old;      /* only for atomic calculation */
+	unsigned int capacity_max;      /* only for dynamic calculation */
+	unsigned int standard_capacity;
 
-        bool initial_update_of_soc;
-        struct mutex fg_lock;
+	bool initial_update_of_soc;
+	struct mutex fg_lock;
 
-        /* register programming */
-        int reg_addr;
-        u8 reg_data[2];
+	/* register programming */
+	int reg_addr;
+	u8 reg_data[2];
 
-        unsigned int pre_soc;
-        int fg_irq;
+	unsigned int pre_soc;
+	int fg_irq;
 };
 #endif /* __S2MU003_FUELGAUGE_H */

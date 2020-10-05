@@ -523,8 +523,19 @@ int s5p_mfc_sleep(struct s5p_mfc_dev *dev)
 
 	ctx = dev->ctx[dev->curr_ctx];
 	if (!ctx) {
-		mfc_err("no mfc context to run\n");
-		return -EINVAL;
+		if (dev->num_inst) {
+			dev->curr_ctx = 0;
+			while (!dev->ctx[dev->curr_ctx]) {
+				dev->curr_ctx++;
+				if (dev->curr_ctx >= MFC_NUM_CONTEXTS)
+					mfc_err("Cannot find a new context\n");
+			}
+		}
+		ctx = dev->ctx[dev->curr_ctx];
+		if (!ctx) {
+			mfc_err("no mfc context to run\n");
+			return -EINVAL;
+		}
 	}
 	old_state = ctx->state;
 	ctx->state = MFCINST_ABORT;

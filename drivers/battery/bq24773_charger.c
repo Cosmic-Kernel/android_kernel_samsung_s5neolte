@@ -16,10 +16,9 @@
 #include <linux/i2c.h>
 #include <linux/mutex.h>
 #include <linux/power_supply.h>
+#include <linux/of.h>
+#include <linux/of_gpio.h>
 #include <linux/battery/charger/bq24773_charger.h>
-#ifdef CONFIG_USB_HOST_NOTIFY
-#include <linux/usb_notify.h>
-#endif
 
 #define ENABLE 1
 #define DISABLE 0
@@ -37,6 +36,10 @@ static enum power_supply_property bq24773_charger_props[] = {
 	POWER_SUPPLY_PROP_CHARGE_OTG_CONTROL,
 	POWER_SUPPLY_PROP_USB_HC,
 	POWER_SUPPLY_PROP_CHARGE_NOW,
+};
+
+static enum power_supply_property bq24773_otg_props[] = {
+	POWER_SUPPLY_PROP_ONLINE,
 };
 
 int bq24773_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest)
@@ -214,7 +217,7 @@ static void bq24773_charger_function_control(struct bq24773_charger *charger)
 		charger->charging_current = 0;
 		charger->input_current =
 			charger->pdata->charging_current
-			[POWER_SUPPLY_TYPE_MAINS].input_current_limit;
+			[POWER_SUPPLY_TYPE_BATTERY].input_current_limit;
 
 	} else {
 		union power_supply_propval value;
@@ -255,6 +258,7 @@ static void bq24773_charger_function_control(struct bq24773_charger *charger)
 
 	bq24773_set_max_voltage(charger, charger->chg_float_voltage);
 	bq24773_set_charge_current(charger, charger->charging_current);
+	mdelay(100);
 	bq24773_set_input_current(charger, charger->input_current);
 
 	bq24773_test_read(charger);
@@ -266,10 +270,9 @@ static void bq24773_charger_initialize(struct bq24773_charger *charger)
 
 	data = 0x834e;
 	bq24773_write_word(charger->i2c, BQ24773_CHG_OPTION0_1, data);
-
 	bq24773_set_max_voltage(charger, charger->pdata->chg_float_voltage);
-	bq24773_set_charge_current(charger, 1770);
-	bq24773_set_input_current(charger, 2000);
+	bq24773_set_input_current(charger, charger->pdata->charging_current
+				  [POWER_SUPPLY_TYPE_BATTERY].input_current_limit);
 	bq24773_test_read(charger);
 }
 
@@ -355,6 +358,63 @@ static int bq24773_chg_set_property(struct power_supply *psy,
 	return 0;
 }
 
+static int bq24773_otg_get_property(struct power_supply *psy,
+			      enum power_supply_property psp,
+			      union power_supply_propval *val)
+{
+	struct bq24773_charger *charger =
+		container_of(psy, struct bq24773_charger, psy_otg);
+
+	if (charger->otg_en < 0)
+		return 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		gpio_get_value(charger->otg_en);
+		if (charger->otg_en)
+			val->intval = 1;
+		else
+			val->intval = 0;
+		break;
+	default:
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static int bq24773_otg_set_property(struct power_supply *psy,
+			  enum power_supply_property psp,
+			  const union power_supply_propval *val)
+{
+	struct bq24773_charger *charger =
+		container_of(psy, struct bq24773_charger, psy_otg);
+
+	if (charger->otg_en < 0)
+		return 0;
+
+	switch (psp) {
+	case POWER_SUPPLY_PROP_ONLINE:
+		if (val->intval) {
+			pr_info("%s : OTG EN\n", __func__);
+			gpio_set_value(charger->otg_en, 1);
+			if (charger->otg_en2)
+				gpio_set_value(charger->otg_en2, 1);
+		} else {
+			pr_info("%s : OTG DISEN\n", __func__);
+			gpio_set_value(charger->otg_en, 0);
+			if (charger->otg_en2)
+				gpio_set_value(charger->otg_en2, 0);
+		}
+		pr_info("%s : OTG SET(%d)\n", __func__, gpio_get_value(charger->otg_en));
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	return 0;
+
+}
+
 static int bq24773_debugfs_show(struct seq_file *s, void *data)
 {
 	struct bq24773_charger *charger = s->private;
@@ -398,6 +458,21 @@ static int bq24773_charger_parse_dt(struct bq24773_charger *charger)
 	} else {
 		ret = of_property_read_u32(np, "battery,chg_float_voltage",
 					   &pdata->chg_float_voltage);
+		charger->otg_en = of_get_named_gpio(np, "charger,otg_en", 0);
+		if (charger->otg_en < 0) {
+			charger->otg_en = -1;
+			pr_info("%s: No use gpios for otg accessory power\n", __func__);
+		} else {
+			pr_info("%s, gpios_otg_power  %d\n", __func__, charger->otg_en);
+		}
+
+		charger->otg_en2 = of_get_named_gpio(np, "charger,otg_en2", 0);
+		if (charger->otg_en2 < 0) {
+			charger->otg_en2 = -1;
+			pr_info("%s: No use gpios for otg accessory power\n", __func__);
+		} else {
+			pr_info("%s, gpios_otg_power  %d\n", __func__, charger->otg_en2);
+		}
 	}
 
 	np = of_find_node_by_name(NULL, "battery");
@@ -485,6 +560,12 @@ static int __devinit bq24773_charger_probe(struct i2c_client *client,
 	charger->psy_chg.set_property	= bq24773_chg_set_property;
 	charger->psy_chg.properties	= bq24773_charger_props;
 	charger->psy_chg.num_properties	= ARRAY_SIZE(bq24773_charger_props);
+	charger->psy_otg.name		= "otg";
+	charger->psy_otg.type		= POWER_SUPPLY_TYPE_OTG;
+	charger->psy_otg.get_property	= bq24773_otg_get_property;
+	charger->psy_otg.set_property	= bq24773_otg_set_property;
+	charger->psy_otg.properties	= bq24773_otg_props;
+	charger->psy_otg.num_properties	= ARRAY_SIZE(bq24773_otg_props);
 
 	bq24773_charger_initialize(charger);
 
@@ -496,14 +577,42 @@ static int __devinit bq24773_charger_probe(struct i2c_client *client,
 		pr_err("%s: Failed to Register psy_chg\n", __func__);
 		goto err_data_free;
 	}
+	ret = power_supply_register(&client->dev, &charger->psy_otg);
+	if (ret) {
+		pr_err("%s: Failed to Register psy_otg\n", __func__);
+		goto err_otg_psy;
+	}
+
+	if (charger->otg_en > 0) {
+		ret = gpio_request(charger->otg_en, "OTG_EN");
+		pr_info("%s[AFTER] : OTG_EN(%d)\n", __func__, charger->otg_en);
+		if (ret) {
+			pr_err("failed to request GPIO %u\n", charger->otg_en);
+			goto err_otg_set;
+		}
+	}
+
+	if (charger->otg_en2 > 0) {
+		ret = gpio_request(charger->otg_en2, "OTG_EN2");
+		pr_info("%s[AFTER] : OTG_EN(%d)\n", __func__, charger->otg_en2);
+		if (ret) {
+			pr_err("failed to request GPIO %u\n", charger->otg_en2);
+			goto err_otg2_set;
+		}
+	}
 
 	pr_info("%s: bq24773 Charger Driver Loaded\n", __func__);
 
 	return 0;
 
+err_otg2_set:
+err_otg_set:
+	power_supply_unregister(&charger->psy_otg);
+err_otg_psy:
+	power_supply_unregister(&charger->psy_chg);
 err_data_free:
 	if (client->dev.of_node)
-		kfree(charger->pdata);
+		devm_kfree(&client->dev, charger->pdata);
 err_parse_dt:
 err_parse_dt_nomem:
 	mutex_destroy(&charger->i2c_lock);
@@ -533,6 +642,7 @@ static int bq24773_charger_remove(struct i2c_client *client)
 	struct bq24773_charger *charger = i2c_get_clientdata(client);
 
 	power_supply_unregister(&charger->psy_chg);
+	power_supply_unregister(&charger->psy_otg);
 	mutex_destroy(&charger->i2c_lock);
 	kfree(charger);
 

@@ -23,6 +23,12 @@
 #include "mmc_ops.h"
 #include "sd_ops.h"
 
+#ifdef CONFIG_MMC_SUPPORT_STLOG
+#include <linux/stlog.h>
+#else
+#define ST_LOG(fmt,...)
+#endif
+
 static const unsigned int tran_exp[] = {
 	10000,		100000,		1000000,	10000000,
 	0,		0,		0,		0
@@ -584,15 +590,26 @@ static int mmc_read_ext_csd(struct mmc_card *card, u8 *ext_csd)
 
 	/* eMMC v5.0 or later */
 	if (card->ext_csd.rev >= 7) {
-		card->ext_csd.cmdq_support = ext_csd[EXT_CSD_CMDQ_SUPPORT];
-		if (card->ext_csd.cmdq_support) {
-			card->ext_csd.cmdq_depth = ext_csd[EXT_CSD_CMDQ_DEPTH];
-			card->ext_csd.qrdy_support =
-				ext_csd[EXT_CSD_QRDY_SUPPORT];
-			card->ext_csd.qrdy_function =
-				ext_csd[EXT_CSD_CMDQ_QRDY_FUNCTION];
+		/* Enable CMDQ only when explicitly enabled at device tree */
+		/* CMDQ supporting eMMC device can be used though we don't */
+		/* use it */
+		if (card->host->caps2 & MMC_CAP2_CMDQ) {
+			card->ext_csd.cmdq_support =
+				ext_csd[EXT_CSD_CMDQ_SUPPORT];
+			if (card->ext_csd.cmdq_support) {
+				/* depth is 0~31 in spec. so +1 for 1~32 */
+				card->ext_csd.cmdq_depth =
+					ext_csd[EXT_CSD_CMDQ_DEPTH] + 1;
+				if (EMMC_MAX_QUEUE_DEPTH <
+						card->ext_csd.cmdq_depth)
+					card->ext_csd.cmdq_depth =
+						EMMC_MAX_QUEUE_DEPTH;
+				card->ext_csd.qrdy_support =
+					ext_csd[EXT_CSD_QRDY_SUPPORT];
+				card->ext_csd.qrdy_function =
+					ext_csd[EXT_CSD_CMDQ_QRDY_FUNCTION];
+			}
 		}
-
 		if (card->cid.manfid == 0x15 &&
 				ext_csd[EXT_CSD_PRE_EOL_INFO] == 0x0 &&
 				ext_csd[EXT_CSD_DEVICE_VERSION] == 0x0) {
@@ -1200,13 +1217,13 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		if (card->ext_csd.hs_max_dtr > 52000000 &&
 			(host->caps2 & MMC_CAP2_HS200 ||
 			 host->caps2 & MMC_CAP2_HS200_DDR)) {
+			/*
+			 * Device output driver strength
+			 */
+			driver_type = host->dev_drv_str << 4;
 			if (en_strobe_enhanced) {
 				err = mmc_select_hs(card);
 			} else {
-				/*
-				 * Device output driver strength
-				 */
-				driver_type = host->dev_drv_str << 4;
 				err = mmc_select_hs200(card, driver_type);
 			}
 		} else if (host->caps & MMC_CAP_MMC_HIGHSPEED)
@@ -1558,8 +1575,10 @@ static int mmc_init_card(struct mmc_host *host, u32 ocr,
 		}
 	}
 
-	if (!oldcard)
+	if (!oldcard) {
 		host->card = card;
+		ST_LOG("<%s> %s: card init succeed\n", __func__,mmc_hostname(host));
+	}
 
 	mmc_free_ext_csd(ext_csd);
 	return 0;

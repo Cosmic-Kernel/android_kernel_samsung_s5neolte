@@ -390,9 +390,7 @@ extern struct attribute_group devfreq_mif_attr_group;
 extern struct of_device_id __devfreq_init_of_table[];
 extern struct devfreq_opp_table devfreq_isp_opp_list[];
 
-extern void exynos7580_devfreq_set_dll_lock_value(struct devfreq_data_mif *, int);
 extern void exynos7_devfreq_init_thermal(void);
-extern struct attribute_group devfreq_mif_attr_group;
 
 #define REGULATOR_MAX_MICROVOLT	INT_MAX
 

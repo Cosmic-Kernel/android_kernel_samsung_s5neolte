@@ -411,10 +411,12 @@ err_add_regulator_devs:
 err_init_irq:
 	wake_lock_destroy(&(chip->irq_wake_lock));
 	mutex_destroy(&chip->io_lock);
-	kfree(chip);
 irq_base_err:
-err_mfd_nomem:
 err_i2cfunc_not_support:
+	kfree(chip);
+err_mfd_nomem:
+	if(pdata)
+		kfree(pdata);
 err_parse_dt:
 err_dt_nomem:
 	return ret;

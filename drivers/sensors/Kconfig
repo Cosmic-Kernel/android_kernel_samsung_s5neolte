@@ -80,6 +80,20 @@ config SENSORS_CM36655
 	help
 	  This option enables proximity & light sensors using CM36655 driver.
 
+config SENSORS_CM36655_LEDA_EN_REGULATOR
+	depends on I2C
+	tristate "CM36652 sensor_en controlled by regulator"
+	default n
+	help
+	  This option enables leda_en controlled by regulator using CM36652 driver.
+
+config SENSORS_CM36655_POWER_REGULATOR
+	depends on I2C
+	tristate "CM36655 vdd & vio controlled"
+	default n
+	help
+	  This option enables vdd & vio controlled using CM36655 driver.
+
 config SENSORS_CM36655_LEDA_EN_GPIO
 	depends on I2C
 	tristate "CM36655 leda_en controlled by GPIO"
@@ -93,6 +107,20 @@ config SENSORS_CM36655_SENSOR_EN_GPIO
 	default n
 	help
 	  This option enables leda_en controlled by GPIO using CM36655 driver.
+
+config SENSORS_CM36655_RESET_DEFENCE_CODE
+	depends on I2C
+	tristate "CM36655 defence code by reset"
+	default n
+	help
+	  This option enables defence code by reset using CM36655 driver.
+
+config SENSORS_CM36672P
+	depends on I2C
+	tristate "CM36672P driver"
+	default n
+	help
+	  This option enables proximity sensor using CM36672P driver.
 
 config SENSORS_TCS3490
 	depends on I2C
@@ -114,6 +142,48 @@ config SENSORS_TMD3782_PROX_ABS
 	default n
 	help
 	   This option enables TMD3782 proximity sensor input report by ABS.
+
+config SENSORS_TMD3700
+	depends on I2C
+	tristate "TMD3700 driver"
+	default n
+	help
+	   This option enables proximity & light sensors using TMD3700 driver.
+
+config SENSORS_TMD3700_RESET_DEFENCE_CODE
+	depends on I2C
+	tristate "TMD3700 defence code for reset"
+	default n
+	help
+	  This option enables defence code for reset of VDD.
+
+config SENSORS_STK3013
+	depends on I2C
+	tristate "STK3013 driver"
+	default n
+	help
+	   This option enables proximity sensors using STK3013 driver.
+
+config SENSORS_GRIP_CHK_HALLIC
+	depends on I2C
+	tristate "grip sensor check to hallic"
+	default n
+	help
+	 This option enables grip sensors checking hall ic status.
+
+config SENSORS_SX9306
+	depends on I2C
+	tristate "SX9306 driver"
+	default n
+	help
+	 This option enables grip sensors using SemTech sx9306 device driver.
+
+config SENSORS_SX9306_NORMAL_TOUCH_THRESHOLD
+	int "SX9306 Grip sensor threshold for normal touch"
+	depends on SENSORS_SX9306
+	default "17"
+	help
+	  This value is the standard of normal touch using SemTech sx9306 device driver.
 
 config SENSORS_SX9310
 	depends on I2C
@@ -305,5 +375,20 @@ config SENSORS_BMM050
 	depends on I2C
 	help
 	 BMM050 Magnetic Sensor Driver implemented by Bosch-Sensortec.
+
+config SENSORS_YAS537
+	tristate "YAS537 Sensor Driver"
+	depends on I2C
+	default n
+	help
+	  If you say yes here you get support for YAMAHA
+	  YAS537 Geomagnitor Sensor.
+
+config SENSORS_YAS_RESET_DEFENCE_CODE
+	depends on I2C
+	tristate "YAS defence code by reset"
+	default n
+	help
+	  This option enables defence code by reset using yas driver.
 
 source "drivers/sensors/max_notchfilter/Kconfig"

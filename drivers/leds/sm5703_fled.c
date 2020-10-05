@@ -51,6 +51,7 @@
 extern struct class *camera_class;
 struct device *flash_dev;
 bool assistive_light = false;
+bool recording_mode = false;
 struct device *sm5703_dev;
 
 static struct i2c_client * sm5703_fled_client = NULL;
@@ -101,6 +102,10 @@ int32_t sm5703_led_mode_ctrl(int state)
 
 	switch(state) {
 		case 0:
+			if (recording_mode == true) {
+				sm5703_fled_set_movie_current_sel(fled_info, info->pdata->fled_torch_current);
+				recording_mode = false;
+			}
 			sm5703_fled_set_mode(fled_info,FLASHLIGHT_MODE_OFF);
 			sm5703_fled_notification(fled_info);
 			break;
@@ -118,6 +123,16 @@ int32_t sm5703_led_mode_ctrl(int state)
 		case 4: /* disable external gpio control for protecting ESD */
 			sm5703_assign_bits(info->i2c_client,SM5703_FLEDCNTL1,SM5703_FLEDEN_MASK,SM5703_FLEDEN_DISABLE);
 			break;
+		case 5:
+			recording_mode = true;
+			sm5703_fled_set_movie_current_sel(fled_info, info->pdata->fled_movie_current);
+			sm5703_fled_set_mode(fled_info,FLASHLIGHT_MODE_TORCH);
+			sm5703_fled_notification(fled_info);
+			break;
+		default :
+			sm5703_fled_set_mode(fled_info,FLASHLIGHT_MODE_OFF);
+			sm5703_fled_notification(fled_info);
+			break;
 	}
 
 	return 0;
@@ -130,6 +145,7 @@ static ssize_t flash_store(struct device *dev, struct device_attribute *attr,
 {
 	int sel = 0;
 	sm_fled_info_t *fled_info = sm_fled_get_info_by_name(NULL);
+	sm5703_fled_info_t *info = (sm5703_fled_info_t *)fled_info;
 	int i, nValue=0;
 	struct pinctrl *pinctrl;
 
@@ -154,6 +170,8 @@ static ssize_t flash_store(struct device *dev, struct device_attribute *attr,
 			sm5703_fled_flash(fled_info,TURN_WAY_GPIO);
 			sm5703_fled_notification(fled_info);
 
+			/* Set torch current */
+			sm5703_fled_set_movie_current_sel(fled_info, info->pdata->fled_torch_current);
 			pinctrl = devm_pinctrl_get_select(sm5703_dev, FLED_PINCTRL_STATE_SLEEP);
 			if (IS_ERR(pinctrl))
 				pr_err("%s: flash %s pins are not configured\n", __func__, FLED_PINCTRL_STATE_SLEEP);
@@ -224,6 +242,7 @@ static ssize_t flash_store(struct device *dev, struct device_attribute *attr,
 }
 
 static DEVICE_ATTR(rear_flash, S_IWUSR|S_IWGRP, NULL, flash_store);
+static DEVICE_ATTR(rear_torch_flash, S_IWUSR|S_IWGRP, NULL, flash_store);
 
 int create_flash_sysfs(void)
 {
@@ -244,6 +263,12 @@ int create_flash_sysfs(void)
 	if (unlikely(err < 0)) {
 		pr_err("flash_sysfs: failed to create device file, %s\n",
 				dev_attr_rear_flash.attr.name);
+	}
+
+	err = device_create_file(flash_dev, &dev_attr_rear_torch_flash);
+	if (unlikely(err < 0)) {
+		pr_err("flash_sysfs: failed to create device file, %s\n",
+				dev_attr_rear_torch_flash.attr.name);
 	}
 	return 0;
 }
@@ -266,9 +291,9 @@ static int sm5703_fled_init(struct sm_fled_info *fled_info)
 			SM5703_IFLED_MASK, info->pdata->fled_flash_current);
 
 	info->base.flashlight_dev->props.torch_brightness =
-		info->pdata->fled_movie_current;
+		info->pdata->fled_torch_current;
 	sm5703_assign_bits(info->i2c_client, SM5703_FLEDCNTL4,
-			SM5703_IMLED_MASK, info->pdata->fled_movie_current);
+			SM5703_IMLED_MASK, info->pdata->fled_torch_current);
 
 	sm5703_reg_write(info->i2c_client, SM5703_FLEDCNTL1,0x1C);//ENABSTMR:Enable | ABSTMR:1.6sec | FLEDEN:Disable
 	sm5703_reg_write(info->i2c_client, SM5703_FLEDCNTL2,0x94);//nENSAFET:Disable | SAFET:400us | nONESHOT:Disable | ONETIMER:500ms
@@ -390,7 +415,7 @@ int32_t sm5703_boost_notification(struct sm_fled_info *fled_info, int32_t on)
 		}
 		else
 		{
-			sm5703_assign_bits(info->i2c_client,SM5703_FLEDCNTL6, SM5703_BSTOUT_MASK,SM5703_BSTOUT_5P1);
+			sm5703_assign_bits(info->i2c_client,SM5703_FLEDCNTL6, SM5703_BSTOUT_MASK,SM5703_BSTOUT_5P0);
 			sm5703_assign_bits(info->i2c_client,SM5703_CNTL,SM5703_OPERATION_MODE_MASK, SM5703_OPERATION_MODE_USB_OTG_MODE);
 		}
 	} else if(on == 0) {
@@ -737,7 +762,8 @@ static struct sm_fled_hal sm5703_fled_hal = {
 //Flash current
 static sm5703_fled_platform_data_t sm5703_default_fled_pdata = {
 	.fled_flash_current = SM5703_FLASH_CURRENT(1000),
-	.fled_movie_current = SM5703_MOVIE_CURRENT(100),
+	.fled_movie_current = SM5703_MOVIE_CURRENT(150),
+	.fled_torch_current = SM5703_MOVIE_CURRENT(100),
 };
 
 #define FLAG_HIGH			(0x01)
@@ -765,6 +791,12 @@ static int sm5703_fled_parse_dt(struct device *dev,
 		dev_info(dev, "movie_current = <%d>\n", buffer[0]);
 		pdata->fled_movie_current = SM5703_MOVIE_CURRENT(buffer[0]);
 	}
+
+	if (of_property_read_u32_array(np, "torch_current", buffer, 1) == 0) {
+		dev_info(dev, "torch_current = <%d>\n", buffer[0]);
+		pdata->fled_torch_current = SM5703_MOVIE_CURRENT(buffer[0]);
+	}
+
 	return 0;
 }
 
@@ -905,6 +937,16 @@ static int sm5703_fled_remove(struct platform_device *pdev)
 	platform_device_unregister(&sm_fled_pdev);
 	mutex_destroy(&fled_info->led_lock);
 	kfree(fled_info);
+
+	if(flash_dev) {
+		device_remove_file(flash_dev, &dev_attr_rear_flash);
+		device_remove_file(flash_dev, &dev_attr_rear_torch_flash);
+	}
+
+	if (camera_class && flash_dev) {
+		device_destroy(camera_class, flash_dev->devt);
+	}
+
 	return 0;
 }
 

@@ -12,11 +12,23 @@ menuconfig INPUT_KEYBOARD
 
 if INPUT_KEYBOARD
 
+config TOUCHKEY_GRIP
+	tristate "touchkey grip for sar"
+	depends on I2C
+	help
+	  Say Y here if you want to use touchkey grip.
+
 config KEYBOARD_ABOV_TOUCH
 	tristate "Abov FT16XX touchkey"
 	depends on I2C
 	help
 	  Say Y here if you want to use ABOV MC96FT16XX chip as touchkey.
+
+config KEYBOARD_ABOV_TOUCH_FT1804
+	tristate "Abov FT18XX touchkey"
+	depends on I2C
+	help
+	  Say Y here if you want to use ABOV MC96FT18XX chip as touchkey.
 
 config KEYBOARD_ADP5520
 	tristate "Keypad Support for ADP5520 PMIC"

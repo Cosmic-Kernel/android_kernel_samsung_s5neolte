@@ -258,6 +258,7 @@ enum iodev_attr_bit {
 	ATTR_NO_LINK_HEADER,	/* Link-layer header is not needed	*/
 	ATTR_NO_CHECK_MAXQ,     /* no need to check rxq overflow condition */
 	ATTR_DUALSIM,		/* support Dual SIM */
+	ATTR_OPTION_REGION,	/* region & operator info */
 };
 #define IODEV_ATTR(b)	(0x1 << b)
 
@@ -289,6 +290,7 @@ struct modem_io_t {
 	enum modem_link tx_link;
 	u32 attrs;
 	char *app;
+	char *option_region;
 #if 1/*defined(CONFIG_LINK_DEVICE_MEMORY_SBD)*/
 	unsigned int ul_num_buffers;
 	unsigned int ul_buffer_size;

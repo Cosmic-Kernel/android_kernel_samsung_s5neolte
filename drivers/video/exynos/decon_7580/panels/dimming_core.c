@@ -501,63 +501,6 @@ int generate_volt_table(struct dim_data *data)
 }
 
 
-static int lookup_volt_index(struct dim_data *data, int gray)
-{
-	int ret, i;
-	int temp;
-	int index;
-	int index_l, index_h, exit;
-	int cnt_l, cnt_h;
-	int p_delta, delta;
-
-	temp = gray >> 20;
-	index = (int)lookup_tbl[temp];
-	exit = 1;
-	i = 0;
-	while(exit) {
-		index_l = temp - i;
-		index_h = temp + i;
-		if (index_l < 0)
-			index_l = 0;
-		if (index_h > MAX_BRIGHTNESS)
-			index_h = MAX_BRIGHTNESS;
-		cnt_l = (int)lookup_tbl[index] - (int)lookup_tbl[index_l];
-		cnt_h = (int)lookup_tbl[index_h] - (int)lookup_tbl[index];
-
-		if (cnt_l + cnt_h) {
-			exit = 0;
-		}
-		i++;
-	}
-
-	p_delta = 0;
-	index = (int)lookup_tbl[index_l];
-	ret = index;
-
-	temp = gamma_multi_tbl[index] << 10;
-
-	if (gray > temp)
-		p_delta = gray - temp;
-	else
-		p_delta = temp - gray;
-
-	for (i = 0; i <= (cnt_l + cnt_h); i++) {
-		temp = gamma_multi_tbl[index + i] << 10;
-		if (gray > temp)
-			delta = gray - temp;
-		else
-			delta = temp - gray;
-
-		if (delta < p_delta) {
-			p_delta = delta;
-			ret = index + i;
-		}
-	}
-
-	return ret;
-}
-
-
 static int calc_reg_v3(struct dim_data *data, int color)
 {
 	int ret;
@@ -701,12 +644,12 @@ static int calc_reg_v255(struct dim_data *data, int color)
 
 int cal_gamma_from_index(struct dim_data *data, struct SmtDimInfo *brInfo)
 {
-	int i, j;
+	int i, j, iv_min;
 	int ret = 0;
-	int gray, index;
-	signed int shift, c_shift;
+	int index = 255;
+	signed int c_shift;
 	int gamma_int[NUM_VREF][CI_MAX];
-	int br, temp;
+	int temp;
 	unsigned char *result;
 	int (*calc_reg[NUM_VREF])(struct dim_data *, int)  = {
 		NULL,
@@ -721,30 +664,11 @@ int cal_gamma_from_index(struct dim_data *data, struct SmtDimInfo *brInfo)
 		calc_reg_v255,
 	};
 
-	br = brInfo->refBr;
 	result = brInfo->gamma;
 
-	if (br > MAX_BRIGHTNESS) {
-		dsim_err("Warning Exceed Max brightness : %d\n", br);
-		br = MAX_BRIGHTNESS;
-	}
-
 	for (i = V3; i < NUM_VREF; i++) {
-#ifdef CONFIG_REF_SHIFT
-		/* get reference shift value */
-		if (brInfo->rTbl == NULL) {
-			shift = 0;
-		}
-		else {
-			shift = (signed int)brInfo->rTbl[i];
-		}
-#else
-		shift = 0;
-#endif
-		gray = brInfo->cGma[vref_index[i]] * br;
-
-		index = lookup_volt_index(data, gray);
-		index = index + shift;
+		if (brInfo->m_gray)
+			index = brInfo->m_gray[i];
 
 		for (j = 0; j < CI_MAX; j++) {
 			if (calc_reg[i] != NULL) {
@@ -785,10 +709,12 @@ int cal_gamma_from_index(struct dim_data *data, struct SmtDimInfo *brInfo)
 	result[index++] = OLED_CMD_GAMMA;
 
 #ifdef HAS_NO_V0_GAMMA
-	for (i = V255; i > V0; i--) {
+	iv_min = V0 + 1;	/* for (i = V255; i > V0; i--) { */
 #else
-	for (i = V255; i >= V0; i--) {
+	iv_min = V0;		/* for (i = V255; i >= V0; i--) { */
 #endif
+
+	for (i = V255; i >= iv_min; i--) {
 		for (j = 0; j < CI_MAX; j++) {
 			if (i == V255) {
 				result[index++] = gamma_int[i][j] > 0xff ? 1 : 0;

@@ -1490,10 +1490,12 @@ static bool __need_migrate_cma_page(struct page *page,
 					VM_STACK_INCOMPLETE_SETUP)
 		return false;
 
-	if (!PageLRU(page))
+	if (!(flags & FOLL_CMA))
 		return false;
 
-	if (!(flags & FOLL_CMA))
+	migrate_prep_local();
+
+	if (!PageLRU(page))
 		return false;
 
 	return true;
@@ -1508,8 +1510,6 @@ static int __migrate_cma_pinpage(struct page *page, struct vm_area_struct *vma)
 	int ret = 0;
 
 	INIT_LIST_HEAD(&migratepages);
-
-	migrate_prep_local();
 
 	if (__isolate_lru_page(page, 0) != 0) {
 		pr_warn("%s: failed to isolate lru page\n", __func__);
@@ -1675,7 +1675,7 @@ split_fallthrough:
 			page = vm_normal_page(vma, address, pte);
 			BUG_ON(!page);
 
-			pr_info("cma: cma page %p[%#lx] migrated to new "
+			pr_debug("cma: cma page %p[%#lx] migrated to new "
 					"page %p[%#lx]\n", old_page,
 					page_to_pfn(old_page),
 					page, page_to_pfn(page));

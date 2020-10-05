@@ -10,12 +10,30 @@ config CAMERA_EEPROM_SUPPORT_FRONT
         default n
         help
           Enable eeprom for front cam.
+config CAMERA_EEPROM_SUPPORT_OIS
+        bool "Enable eeprom for ois"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          Enable eeprom for ois cam.
 config CAMERA_ACTUATOR_DW9807
         bool "Use DW9807 camera actuator and eeprom"
         depends on VIDEO_EXYNOS_FIMC_IS
         default n
         help
           Use DW9807 camera actuator and eeprom.
+config CAMERA_ACTUATOR_AK7371
+        bool "Use AK7371 camera actuator and eeprom"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          Use AK7371 camera actuator and eeprom.
+config CAMERA_ACTUATOR_ZC533
+        bool "Use ZC533 camera actuator and eeprom"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          Use ZC533 camera actuator and eeprom.
 config COMPANION_USE
         bool "Use companion"
         depends on VIDEO_EXYNOS_FIMC_IS
@@ -48,6 +66,12 @@ config COMPANION_STANDBY_USE
           Use companion standby.
 config OIS_USE
         bool "Use ois"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          Use ois.
+config OIS_USE_BU24219
+        bool "Use ois bu24219 of Rohm"
         depends on VIDEO_EXYNOS_FIMC_IS
         default n
         help
@@ -88,3 +112,27 @@ config CAMERA_GV
         default n
         help
           This camera is gv project.
+config CAMERA_A3X
+        bool "This camera is a3x project"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          This camera is a3x project.
+config CAMERA_A5X
+        bool "This camera is a5x project"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          This camera is a5x project.
+config CAMERA_A7X
+        bool "This camera is a7x project"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          This camera is a7x project.
+config CAMERA_J7X
+        bool "This camera is j7x project"
+        depends on VIDEO_EXYNOS_FIMC_IS
+        default n
+        help
+          This camera is j7x project.

@@ -77,7 +77,13 @@
 #define DEV_TYPE3_AV_WITH_VBUS		(0x1 << 4)
 #define DEV_TYPE3_NO_STD_CHG		(0x1 << 2)
 #define DEV_TYPE3_MHL			(0x1 << 0)
+#if defined(CONFIG_MUIC_UNIVERSAL_SM5705)
+#define DEV_TYPE3_LO_TA			(0x1 << 5)
+#define DEV_TYPE3_CHG_TYPE	(DEV_TYPE3_U200_CHG | DEV_TYPE3_NO_STD_CHG | \
+				DEV_TYPE3_LO_TA)
+#else
 #define DEV_TYPE3_CHG_TYPE	(DEV_TYPE3_U200_CHG | DEV_TYPE3_NO_STD_CHG)
+#endif
 
 static struct vps_cfg cfg_MHL = {
 	.name = "MHL",
@@ -129,7 +135,7 @@ static struct vps_cfg cfg_JIG_USB_ON = {
 };
 static struct vps_cfg cfg_DESKDOCK = {
 	.name = "Deskdock",
-	.attr = MATTR(VCOM_OPEN, VB_CHK),
+	.attr = MATTR(VCOM_OPEN, VB_ANY),
 };
 static struct vps_cfg cfg_TYPE2_CHG = {
 	.name = "TYPE2 Charger",
@@ -300,6 +306,21 @@ static bool vps_is_vbvolt(vps_data_t *pmsr, struct vps_tbl_data *pvps)
 		return true;
 
 	 return false;
+}
+
+/* Check it the resolved device type is treated as a different one
+ * when VBUS also comes along.
+ */
+int resolve_twin_mdev(int mdev, bool vbus)
+{
+	if (vbus) {
+		if (mdev == MDEV(DESKDOCK)) {
+			pr_info("%s: mdev:%d vbus:%d\n",__func__, mdev, vbus);
+			return MDEV(DESKDOCK_VB);
+		}
+	}
+
+	return 0;
 }
 
 int resolve_dev_based_on_adc_chgtype(muic_data_t *pmuic, vps_data_t *pmsr)
@@ -503,10 +524,14 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 	muic_attached_dev_t new_dev = ATTACHED_DEV_UNKNOWN_MUIC;
 	int intr = MUIC_INTR_DETACH;
 	int vbvolt = 0, adc = 0;
+	int twin_mdev = 0;
 
 #if defined(CONFIG_MUIC_UNIVERSAL_SM5504)
-	intr = MUIC_INTR_ATTACH;
 	new_dev = pmuic->vps.t.attached_dev;
+	if (new_dev != ATTACHED_DEV_UNKNOWN_MUIC)
+		intr = MUIC_INTR_ATTACH;
+	adc = pmuic->vps.s.adc;
+	vbvolt = pmuic->vps.s.vbvolt;
 #else
 	int val1, val2, val3;
 
@@ -580,8 +605,15 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 	if (val3 & DEV_TYPE3_CHG_TYPE)
 	{
 		intr = MUIC_INTR_ATTACH;
-		new_dev = ATTACHED_DEV_TA_MUIC;
-		pr_info("%s : TYPE3_CHARGER DETECTED\n", MUIC_DEV_NAME);
+
+		if (val3 & DEV_TYPE3_NO_STD_CHG) {
+			new_dev = ATTACHED_DEV_USB_MUIC;
+			pr_info("%s : TYPE3 DCD_OUT_TIMEOUT DETECTED\n", MUIC_DEV_NAME);
+
+		} else {
+			new_dev = ATTACHED_DEV_TA_MUIC;
+			pr_info("%s : TYPE3_CHARGER DETECTED\n", MUIC_DEV_NAME);
+		}
 	}
 
 	if (val2 & DEV_TYPE2_AV || val3 & DEV_TYPE3_AV_WITH_VBUS)
@@ -603,10 +635,21 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 		use ADC to find the attached device */
 	if(new_dev == ATTACHED_DEV_UNKNOWN_MUIC) {
 		switch (adc) {
+		case ADC_USB_LANHUB:
+			intr = MUIC_INTR_ATTACH;
+			new_dev = ATTACHED_DEV_USB_LANHUB_MUIC;
+			pr_info("%s : LANHUB DETECTED\n", MUIC_DEV_NAME);
+			break;
+
 		case ADC_CEA936ATYPE1_CHG : /*200k ohm */
 		{
+			int rescanned_dev;
+
+			if (!vbvolt)
+				break;
+
 			/* For LG USB cable which has 219k ohm ID */
-			int rescanned_dev = do_BCD_rescan(pmuic);
+			rescanned_dev = do_BCD_rescan(pmuic);
 
 			if (rescanned_dev > 0) {
 				pr_info("%s : TYPE1 CHARGER DETECTED(USB)\n", MUIC_DEV_NAME);
@@ -666,6 +709,11 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 			new_dev = ATTACHED_DEV_CHARGING_CABLE_MUIC;
 			pr_info("%s : PS_CABLE DETECTED\n", MUIC_DEV_NAME);
 			break;
+		case ADC_DESKDOCK:
+			intr = MUIC_INTR_ATTACH;
+			new_dev = ATTACHED_DEV_DESKDOCK_MUIC;
+			pr_info("%s : ADC DESKDOCK DETECTED\n", MUIC_DEV_NAME);
+			break;
 		case ADC_OPEN:
 			/* sometimes muic fails to catch JIG_UART_OFF detaching */
 			/* double check with ADC */
@@ -676,7 +724,9 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 			}
 			break;
 		case ADC_UNIVERSAL_MMDOCK:
-			pr_info("%s : ADC UNIVERSAL_MMDOCK Discarded\n", MUIC_DEV_NAME);
+			intr = MUIC_INTR_ATTACH;
+			new_dev = ATTACHED_DEV_UNIVERSAL_MMDOCK_MUIC;
+			pr_info("%s : ADC UNIVERSAL_MMDOCK\n", MUIC_DEV_NAME);
 			break;
 
 		case ADC_RESERVED_VZW:
@@ -689,6 +739,12 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 			new_dev = ATTACHED_DEV_VZW_INCOMPATIBLE_MUIC;
 			intr = MUIC_INTR_ATTACH;
 			pr_info("%s : ADC INCOMPATIBLE_VZW DETECTED\n", MUIC_DEV_NAME);
+			break;
+
+		case ADC_HMT:
+			new_dev = ATTACHED_DEV_HMT_MUIC;
+			intr = MUIC_INTR_ATTACH;
+			pr_info("%s : ADC HMT DETECTED\n", MUIC_DEV_NAME);
 			break;
 
 		default:
@@ -706,10 +762,14 @@ static int resolve_dedicated_dev(muic_data_t *pmuic, muic_attached_dev_t *pdev, 
 
 	/* Check it the cable type is supported.
 	  */
-	if (vps_is_supported_dev(new_dev))
-		pr_info("%s:Supported.\n", __func__);
-	else if(vbvolt) {
-		intr = MUIC_INTR_ATTACH;
+
+	if (vps_is_supported_dev(new_dev)) {
+		if ((twin_mdev = resolve_twin_mdev(new_dev, vbvolt))) {
+			new_dev = twin_mdev;
+			pr_info("%s:Supported twin mdev-> %d\n", __func__, twin_mdev);
+		} else
+			pr_info("%s:Supported.\n", __func__);
+	} else if(vbvolt && (intr == MUIC_INTR_ATTACH)) {
 		new_dev = ATTACHED_DEV_UNDEFINED_CHARGING_MUIC;
 		pr_info("%s:Unsupported->UNDEFINED_CHARGING\n", __func__);
 	} else {

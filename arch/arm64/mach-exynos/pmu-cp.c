@@ -237,12 +237,6 @@ int exynos_set_cp_power_onoff(enum cp_mode mode)
 		else
 			pr_info("mif: %s: CP Power Down: [0x%08X] -> [0x%08X]\n", __func__,
 				cp_ctrl, exynos_smc(SMC_ID, READ_CTRL, 0, 0) >> 16);
-
-		exynos_sys_powerdown_conf_cp(mode);
-
-		/* some delay */
-		cpu_relax();
-		usleep_range(80, 100);
 	}
 
 exit:

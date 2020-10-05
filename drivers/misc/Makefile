@@ -66,8 +66,9 @@ obj-$(CONFIG_SEC_MODEM_V1)	+= modem_v1/
 # Secure OS Mobicore Interface
 obj-$(CONFIG_MOBICORE_DRIVER)  += tzic64.o
 
-# Samsung Secure OS Support
-obj-$(CONFIG_TZDEV)		+= tz/
+# BlowFish
+obj-$(CONFIG_TZDEV)		+= tzdev/
+
 obj-$(CONFIG_SENSORS_BHI)	+= bhy/
 
 # Samsung Jack Support
@@ -80,3 +81,5 @@ obj-$(CONFIG_DM_VERITY)		+= dmverity_query.o
 ifeq ($(TIMA_ENABLED),1)
 obj-$(CONFIG_TIMA_LOG)		+= tima_debug_log.o
 endif
+
+obj-$(CONFIG_UID_CPUTIME) 	+= uid_cputime.o

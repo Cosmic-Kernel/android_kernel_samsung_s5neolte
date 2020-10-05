@@ -195,6 +195,10 @@ static long tzic_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 
 		case TZIC_IOCTL_GET_FUSE_REQ:
 			LOG(KERN_INFO "[oemflag]get_fuse\n");
+			if(!access_ok(VERIFY_WRITE, (void *)arg, sizeof((void *)arg))) {
+				LOG(KERN_INFO "Address is not in user space");
+				return -1;
+			}
 			exynos_smc_read_oemflag(0x80010001, (u64 *) arg);
 			goto return_default;
 		break;

@@ -444,6 +444,12 @@ static void samsung_pinmux_setup(struct pinctrl_dev *pctldev, unsigned selector,
 
 	pin_to_reg_bank(drvdata, grp->pins[0] - drvdata->ctrl->base,
 			&reg, &pin_offset, &bank);
+
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
+		return;
+#endif
+
 	type = bank->type;
 	mask = (1 << type->fld_width[PINCFG_TYPE_FUNC]) - 1;
 	shift = pin_offset * type->fld_width[PINCFG_TYPE_FUNC];
@@ -452,6 +458,11 @@ static void samsung_pinmux_setup(struct pinctrl_dev *pctldev, unsigned selector,
 		shift -= 32;
 		reg += 4;
 	}
+
+#ifdef CONFIG_MST_SECURE_GPIO
+	if (!strncmp(bank->name, "gpc4", 4))
+		return;
+#endif
 
 	spin_lock_irqsave(&bank->slock, flags);
 
@@ -514,6 +525,12 @@ static int samsung_pinmux_gpio_set_direction(struct pinctrl_dev *pctldev,
 	unsigned long flags;
 
 	bank = gc_to_pin_bank(range->gc);
+
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
+		return 0;
+#endif
+
 	type = bank->type;
 	drvdata = pinctrl_dev_get_drvdata(pctldev);
 	reg_ext_base = bank->eint_ext_offset ?
@@ -530,6 +547,11 @@ static int samsung_pinmux_gpio_set_direction(struct pinctrl_dev *pctldev,
 		shift -= 32;
 		reg += 4;
 	}
+
+#ifdef CONFIG_MST_SECURE_GPIO
+	if (!strncmp(bank->name, "gpc4", 4))
+		return 0;
+#endif
 
 	spin_lock_irqsave(&bank->slock, flags);
 
@@ -582,10 +604,21 @@ static int samsung_pinconf_rw(struct pinctrl_dev *pctldev, unsigned int pin,
 	drvdata = pinctrl_dev_get_drvdata(pctldev);
 	pin_to_reg_bank(drvdata, pin - drvdata->ctrl->base, &reg_base,
 					&pin_offset, &bank);
+
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
+		return 0;
+#endif
+
 	type = bank->type;
 
 	if (cfg_type >= PINCFG_TYPE_NUM || !type->fld_width[cfg_type])
 		return -EINVAL;
+
+#ifdef CONFIG_MST_SECURE_GPIO
+	if (!strncmp(bank->name, "gpc4", 4))
+		return 0;
+#endif
 
 	width = type->fld_width[cfg_type];
 	cfg_reg = type->reg_offset[cfg_type];
@@ -758,6 +791,11 @@ static void samsung_gpio_set(struct gpio_chip *gc, unsigned offset, int value)
 		bank->drvdata->virt_ext_base : bank->drvdata->virt_base;
 	u32 data;
 
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
+		return;
+#endif
+
 	reg = reg_ext_base + bank->pctl_offset;
 
 	spin_lock_irqsave(&bank->slock, flags);
@@ -803,6 +841,77 @@ static int samsung_gpio_direction_input(struct gpio_chip *gc, unsigned offset)
 	return pinctrl_gpio_direction_input(gc->base + offset);
 }
 
+/* gpiolib gpio_set callback function */
+static void samsung_gpio_set_value(struct gpio_chip *gc, unsigned offset, int value)
+{
+	struct samsung_pin_bank *bank = gc_to_pin_bank(gc);
+	struct samsung_pin_bank_type *type = bank->type;
+	void __iomem *reg;
+	void __iomem *reg_ext_base = (bank->eint_ext_offset) ?
+		bank->drvdata->virt_ext_base : bank->drvdata->virt_base;
+	u32 data;
+
+	reg = reg_ext_base + bank->pctl_offset;
+
+#ifdef CONFIG_MST_SECURE_GPIO
+	if (!strncmp(bank->name, "gpc4", 4))
+		return;
+#endif
+
+	data = readl(reg + type->reg_offset[PINCFG_TYPE_DAT]);
+	data &= ~(1 << offset);
+	if (value)
+		data |= 1 << offset;
+
+	if (bank->drvdata->ctrl->gpio_type == EXYNOS_GPIO_TYPE_DAT_CLEAR)
+		data &= bank->dat_mask;
+
+	writel(data, reg + type->reg_offset[PINCFG_TYPE_DAT]);
+
+}
+
+static int samsung_gpio_set_direction(struct samsung_pin_bank *bank,
+		unsigned offset, bool input)
+{
+	struct samsung_pin_bank_type *type;
+	struct samsung_pinctrl_drv_data *drvdata;
+	void __iomem *reg;
+	void __iomem *reg_ext_base;
+	u32 data, mask, shift;
+
+	drvdata = bank->drvdata;
+	type = bank->type;
+	reg_ext_base = bank->eint_ext_offset ?
+			drvdata->virt_ext_base : drvdata->virt_base;
+
+	reg = reg_ext_base + bank->pctl_offset +
+				type->reg_offset[PINCFG_TYPE_FUNC];
+
+	mask = (1 << type->fld_width[PINCFG_TYPE_FUNC]) - 1;
+	shift = offset * type->fld_width[PINCFG_TYPE_FUNC];
+	if (shift >= 32) {
+		/* Some banks have two config registers */
+		shift -= 32;
+		reg += 4;
+	}
+
+	data = readl(reg);
+	data &= ~(mask << shift);
+
+	if (!input)
+		data |= FUNC_OUTPUT << shift;
+
+	if (drvdata->ctrl->gpio_type == EXYNOS_GPIO_TYPE_DAT_CLEAR) {
+		if (!input)
+			bank->dat_mask |= 1 << offset;
+		else
+			bank->dat_mask &= ~(1 <<offset);
+	}
+	writel(data, reg);
+
+	return 0;
+}
+
 /*
  * gpiolib gpio_direction_output callback function. The setting of the pin
  * mux function as 'gpio output' will be handled by the pinctrl susbsystem
@@ -812,12 +921,17 @@ static int samsung_gpio_direction_output(struct gpio_chip *gc, unsigned offset,
 							int value)
 {
 	struct samsung_pin_bank *bank = gc_to_pin_bank(gc);
+	unsigned long flags;
 
 	if (bank->drvdata->ctrl->gpio_type == EXYNOS_GPIO_TYPE_DAT_CLEAR)
 		bank->dat_mask |= 1 << offset;
 
-	samsung_gpio_set(gc, offset, value);
-	return pinctrl_gpio_direction_output(gc->base + offset);
+	spin_lock_irqsave(&bank->slock, flags);
+	samsung_gpio_set_value(gc, offset, value);
+	samsung_gpio_set_direction(bank, offset, false);
+	spin_unlock_irqrestore(&bank->slock, flags);
+
+	return 0;
 }
 
 /*
@@ -1373,6 +1487,11 @@ static void samsung_pinctrl_save_regs(
 		if (!widths[PINCFG_TYPE_CON_PDN])
 			continue;
 
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+		if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
+			continue;
+#endif
+
 		for (type = 0; type < PINCFG_TYPE_NUM; type++)
 			if (widths[type])
 				bank->pm_save[type] = readl(reg + offs[type]);
@@ -1412,6 +1531,11 @@ static void samsung_pinctrl_restore_regs(
 		/* Registers without a powerdown config aren't lost */
 		if (!widths[PINCFG_TYPE_CON_PDN])
 			continue;
+
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+		if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
+			continue;
+#endif
 
 		if (widths[PINCFG_TYPE_FUNC] * bank->nr_pins > 32) {
 			/* Some banks have two config registers */
@@ -1465,6 +1589,11 @@ static void samsung_pinctrl_set_pdn_previos_state(
 
 		if (!widths[PINCFG_TYPE_CON_PDN])
 			continue;
+
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+		if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4))
+			continue;
+#endif
 
 		/* set previous state */
 		writel(0xffffffff, reg + offs[PINCFG_TYPE_CON_PDN]);
@@ -1823,6 +1952,13 @@ static void gpiodvs_check_init_gpio(struct samsung_pinctrl_drv_data *drvdata,
 	pin_to_reg_bank(drvdata, pin - drvdata->ctrl->base,
 					&reg_base, &pin_offset, &bank);
 
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4)) {
+		init_gpio_idx++;
+		goto out;
+	}
+#endif
+
 	/* GPZ ports are AUD interface (I2S, UART, PCM, SB) that should not
 	 * access when AUD power is disabled
 	 */
@@ -1830,8 +1966,9 @@ static void gpiodvs_check_init_gpio(struct samsung_pinctrl_drv_data *drvdata,
 		init_gpio_idx++;
 		goto out;
 	}
+
 #ifdef CONFIG_MST_SECURE_GPIO
-	if (!strncmp(bank->name, "gpj", 3)) {
+	if (!strncmp(bank->name, "gpc4", 4)) {
 		init_gpio_idx++;
 		goto out;
 	}
@@ -1881,6 +2018,13 @@ static void gpiodvs_check_sleep_gpio(struct samsung_pinctrl_drv_data *drvdata,
 	pin_to_reg_bank(drvdata, pin - drvdata->ctrl->base,
 					&reg_base, &pin_offset, &bank);
 
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (!strncmp(bank->name, CONFIG_SENSORS_FP_SPI_GPIO, 4)) {
+		sleep_gpio_idx++;
+		goto out;
+	}
+#endif
+
 	/* GPZ ports are AUD interface (I2S, UART, PCM, SB) that should not
 	 * access when AUD power is disabled
 	 */
@@ -1888,8 +2032,9 @@ static void gpiodvs_check_sleep_gpio(struct samsung_pinctrl_drv_data *drvdata,
 		sleep_gpio_idx++;
 		goto out;
 	}
+
 #ifdef CONFIG_MST_SECURE_GPIO
-	if (!strncmp(bank->name, "gpj", 3)) {
+	if (!strncmp(bank->name, "gpc4", 4)) {
 		sleep_gpio_idx++;
 		goto out;
 	}

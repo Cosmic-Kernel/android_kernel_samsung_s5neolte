@@ -1620,6 +1620,7 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	unsigned int reason;
 	unsigned int err;
 	unsigned long flags;
+	unsigned int reg = 0;
 
 	mfc_debug_enter();
 
@@ -1691,19 +1692,69 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 	case S5P_FIMV_R2H_CMD_FIELD_DONE_RET:
 	case S5P_FIMV_R2H_CMD_FRAME_DONE_RET:
 	case S5P_FIMV_R2H_CMD_COMPLETE_SEQ_RET:
+	case S5P_FIMV_R2H_CMD_ENC_BUFFER_FULL_RET:
 		if (ctx->type == MFCINST_DECODER) {
 			s5p_mfc_handle_frame(ctx, reason, err);
 		} else if (ctx->type == MFCINST_ENCODER) {
 			if (reason == S5P_FIMV_R2H_CMD_SLICE_DONE_RET) {
 				dev->preempt_ctx = ctx->num;
+				enc->buf_full = 0;
 				enc->in_slice = 1;
+			} else if (reason == S5P_FIMV_R2H_CMD_ENC_BUFFER_FULL_RET) {
+				mfc_err_ctx("stream buffer size(%d) isn't enough\n",
+						s5p_mfc_get_enc_strm_size());
+				dev->preempt_ctx = ctx->num;
+				enc->buf_full = 1;
+				enc->in_slice = 0;
 			} else {
+				enc->buf_full = 0;
 				enc->in_slice = 0;
 			}
 
 			if (ctx->c_ops->post_frame_start) {
-				if (ctx->c_ops->post_frame_start(ctx))
-					mfc_err_ctx("post_frame_start() failed\n");
+				if (ctx->enc_res_change || ctx->enc_res_change_state) {
+					/* Right after the first NAL_START finished with the new resolution,
+					 * We need to reset the fields
+					 */
+					if (ctx->enc_res_change) {
+						reg = s5p_mfc_read_reg(dev, S5P_FIMV_E_PARAM_CHANGE);
+						reg &= ~(0x7 << 6); /* clear resolution change bits */
+						s5p_mfc_write_reg(dev, reg, S5P_FIMV_E_PARAM_CHANGE);
+
+						ctx->enc_res_change_state = ctx->enc_res_change;
+						ctx->enc_res_change = 0;
+					}
+
+					if (ctx->enc_res_change_state == 1) { /* resolution swap */
+						ctx->enc_res_change_state = 0;
+					} else if (ctx->enc_res_change_state == 2) { /* resolution change */
+						reg = s5p_mfc_read_reg(dev, S5P_FIMV_E_NAL_DONE_INFO);
+						reg = (reg & (0x3 << 4)) >> 4;
+
+						mfc_debug(2, "Encoding Resolution Status : %d\n", reg);
+
+						if (reg == 1) { /* Resolution Change for B-frame */
+							/* Encode with previous resolution */
+							/* NOTHING TO-DO */
+						} else if (reg == 2) { /* Resolution Change for B-frame */
+							s5p_mfc_release_codec_buffers(ctx);
+							ctx->state = MFCINST_HEAD_PARSED; /* for INIT_BUFFER cmd */
+
+							ctx->enc_res_change_state = 0;
+						} else if (reg == 3) { /* Resolution Change for only P-frame */
+							s5p_mfc_release_codec_buffers(ctx);
+							ctx->state = MFCINST_HEAD_PARSED; /* for INIT_BUFFER cmd */
+
+							ctx->enc_res_change_state = 0;
+							ctx->enc_res_change_re_input = 1;
+						}
+					}
+					if (ctx->c_ops->post_frame_start(ctx))
+						mfc_err_ctx("post_frame_start() failed\n");
+				} else {
+					if (ctx->c_ops->post_frame_start(ctx))
+						mfc_err_ctx("post_frame_start() failed\n");
+				}
 
 				s5p_mfc_clear_int_flags();
 				if (clear_hw_bit(ctx) == 0)
@@ -1791,8 +1842,18 @@ static irqreturn_t s5p_mfc_irq(int irq, void *priv)
 		goto irq_cleanup_hw;
 		break;
 	case S5P_FIMV_R2H_CMD_NAL_ABORT_RET:
-		ctx->state = MFCINST_ABORT;
-		clear_work_bit(ctx);
+		if (ctx->type == MFCINST_ENCODER) {
+			ctx->state = MFCINST_RUNNING_BUF_FULL;
+			enc->buf_full = 0;
+			if (ctx->codec_mode == S5P_FIMV_CODEC_VP8_ENC)
+				mfc_err_ctx("stream buffer size isn't enough\n");
+			if (ctx->c_ops->post_frame_start)
+				if (ctx->c_ops->post_frame_start(ctx))
+					mfc_err_ctx("post_frame_start() failed\n");
+		} else {
+			ctx->state = MFCINST_ABORT;
+			clear_work_bit(ctx);
+		}
 		if (clear_hw_bit(ctx) == 0)
 			BUG();
 		goto irq_cleanup_hw;
@@ -2191,8 +2252,8 @@ static int s5p_mfc_open(struct file *file)
 		}
 	}
 
-	mfc_info_ctx("MFC open completed [%d:%d] dev = %p, ctx = %p\n",
-			dev->num_drm_inst, dev->num_inst, dev, ctx);
+	mfc_info_ctx("MFC open completed [%d:%d] dev = %p, ctx = %p, version = %d\n",
+			dev->num_drm_inst, dev->num_inst, dev, ctx, MFC_DRIVER_INFO);
 	mutex_unlock(&dev->mfc_mutex);
 	return ret;
 
@@ -2264,10 +2325,6 @@ err_no_device:
 	return ret;
 }
 
-#define need_to_wait_frame_start(ctx)		\
-	(((ctx->state == MFCINST_FINISHING) ||	\
-	  (ctx->state == MFCINST_RUNNING)) &&	\
-	 test_bit(ctx->num, &ctx->dev->hw_lock))
 /* Release MFC context */
 static int s5p_mfc_release(struct file *file)
 {
@@ -2296,6 +2353,21 @@ static int s5p_mfc_release(struct file *file)
 			s5p_mfc_cleanup_timeout(ctx);
 	}
 
+	/* If a H/W operation is in progress, wait for it complete */
+	if (need_to_wait_nal_abort(ctx)) {
+		ctx->state = MFCINST_ABORT;
+		if (s5p_mfc_wait_for_done_ctx(ctx,
+				S5P_FIMV_R2H_CMD_NAL_ABORT_RET))
+			s5p_mfc_cleanup_timeout(ctx);
+	} else if (test_bit(ctx->num, &dev->hw_lock)) {
+		ctx->state = MFCINST_ABORT;
+		ret = wait_event_timeout(ctx->queue,
+				(test_bit(ctx->num, &dev->hw_lock) == 0),
+				msecs_to_jiffies(MFC_INT_TIMEOUT));
+		if (ret == 0)
+			mfc_err_ctx("wait for event failed\n");
+	}
+
 	if (ctx->type == MFCINST_ENCODER) {
 		enc = ctx->enc_priv;
 		if (!enc) {
@@ -2304,7 +2376,7 @@ static int s5p_mfc_release(struct file *file)
 			return -EINVAL;
 		}
 
-		if (enc->in_slice) {
+		if (enc->in_slice || enc->buf_full) {
 			ctx->state = MFCINST_ABORT_INST;
 			spin_lock_irq(&dev->condlock);
 			set_bit(ctx->num, &dev->ctx_work_bits);
@@ -2315,6 +2387,7 @@ static int s5p_mfc_release(struct file *file)
 				s5p_mfc_cleanup_timeout(ctx);
 
 			enc->in_slice = 0;
+			enc->buf_full = 0;
 		}
 	}
 
@@ -2340,6 +2413,9 @@ static int s5p_mfc_release(struct file *file)
 		mfc_info_ctx("UHD decoding stop\n");
 	}
 #endif
+
+	if (ctx->skype_scenario)
+		ctx->skype_scenario = 0;
 
 	if (call_cop(ctx, cleanup_ctx_ctrls, ctx) < 0)
 		mfc_err_ctx("failed in cleanup_ctx_ctrl\n");
@@ -3046,6 +3122,8 @@ static int s5p_mfc_probe(struct platform_device *pdev)
 				dev->pdata->qos_extra[i].freq_mfc,
 				dev->pdata->qos_extra[i].freq_mif);
 	}
+	pm_qos_add_request(&dev->qos_req_cluster0, PM_QOS_CLUSTER0_FREQ_MIN, 0);
+	pm_qos_add_request(&dev->qos_req_cluster1, PM_QOS_CLUSTER1_FREQ_MIN, 0);
 #endif
 
 	iovmm_set_fault_handler(dev->device,

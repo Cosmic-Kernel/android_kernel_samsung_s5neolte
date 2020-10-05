@@ -103,6 +103,7 @@ enum {
 #ifdef CONFIG_SAMSUNG_LPM_MODE
 extern int poweroff_charging;
 #endif
+extern unsigned int lcdtype;
 extern unsigned int system_rev;
 static int touchkey_keycode[] = { 0,
 	KEY_RECENT, KEY_BACK,
@@ -1058,8 +1059,6 @@ static struct attribute_group sec_touchkey_attr_group = {
 	.attrs = sec_touchkey_attributes,
 };
 
-extern int get_samsung_lcd_attached(void);
-
 static int abov_tk_fw_check(struct abov_tk_info *info)
 {
 	struct i2c_client *client = info->client;
@@ -1120,8 +1119,8 @@ static int abov_tk_fw_check(struct abov_tk_info *info)
 		dev_err(&client->dev,
 			"%s: touchkey driver unload\n", __func__);
 
-		if (get_samsung_lcd_attached() == 0) {
-			dev_err(&client->dev, "%s : get_samsung_lcd_attached()=0 \n", __func__);
+		if (lcdtype == 0) {
+			dev_err(&client->dev, "%s : lcdtype(0)\n", __func__);
 				return ret;
 		}
 #endif
@@ -1200,10 +1199,12 @@ int abov_key_led_control(struct abov_touchkey_platform_data *pdata, bool on)
 				pr_info("[TKEY] %s: led on fail\n", __func__);
 		}
 	} else {
-		if (regulator_is_enabled(pdata->avdd_vreg))
-			regulator_disable(pdata->avdd_vreg);
-		else
-			regulator_force_disable(pdata->avdd_vreg);
+		if (pdata->avdd_vreg) {
+			if (regulator_is_enabled(pdata->avdd_vreg))
+				regulator_disable(pdata->avdd_vreg);
+			else
+				regulator_force_disable(pdata->avdd_vreg);
+		}
 	}
 
 	abov_keyled_enabled = on;
@@ -1338,11 +1339,11 @@ static int abov_tk_probe(struct i2c_client *client,
 		return -EIO;
 	}
 
-#ifdef LED_TWINKLE_BOOTING
-	if (get_samsung_lcd_attached() == 0) {
-                dev_err(&client->dev, "%s : get_samsung_lcd_attached()=0 \n", __func__);
-                return -EIO;
-        }
+#ifndef LED_TWINKLE_BOOTING
+	if (lcdtype == 0) {
+		dev_err(&client->dev, "%s : lcdtype(0)\n", __func__);
+			return -EIO;
+	}
 #endif
 
 	info = kzalloc(sizeof(struct abov_tk_info), GFP_KERNEL);
@@ -1490,8 +1491,8 @@ static int abov_tk_probe(struct i2c_client *client,
 
 	touchkey_led_set(info, 0);
 #ifdef LED_TWINKLE_BOOTING
-	if (get_samsung_lcd_attached() == 0) {
-		dev_err(&client->dev, "%s : get_samsung_lcd_attached()=0, so start LED twinkle \n", __func__);
+	if (lcdtype == 0) {
+		dev_err(&client->dev, "%s : lcdtype(0), so start LED twinkle \n", __func__);
 
 		INIT_DELAYED_WORK(&info->led_twinkle_work, led_twinkle_work);
 		info->led_twinkle_check =  1;

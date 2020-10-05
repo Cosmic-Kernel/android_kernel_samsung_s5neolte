@@ -32,5 +32,7 @@
 #define FIMC_IS_MAX_FW_SIZE                (8 * 1024)
 #define FIMC_IS_MAX_SETFILE_SIZE           (1120 * 1024)
 #define HEADER_CRC32_LEN                   (80)
+#define FROM_AF_CAL_PAN_ADDR                0x0100
+#define FROM_AF_CAL_MACRO_ARRD              0x0108
 
 #endif /* FIMC_IS_EEPROM_REAR_SR544_V001_H */

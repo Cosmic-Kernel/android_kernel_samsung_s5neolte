@@ -61,7 +61,7 @@
 #define MMC_BKOPS_MAX_TIMEOUT	(4 * 60 * 1000) /* max time to wait in ms */
 
 static struct workqueue_struct *workqueue;
-static const unsigned freqs[] = {400000, };
+static const unsigned freqs[] = {400000, 300000};
 
 /*
  * Enabling software CRCs on the data blocks can be a significant (30%)
@@ -902,6 +902,10 @@ EXPORT_SYMBOL(mmc_start_req);
  */
 void mmc_wait_for_req(struct mmc_host *host, struct mmc_request *mrq)
 {
+#ifdef CONFIG_MMC_BLOCK_DEFERRED_RESUME
+	if (mmc_bus_needs_resume(host))
+		mmc_resume_bus(host);
+#endif	
 	__mmc_start_req(host, mrq);
 	mmc_wait_for_req_done(host, mrq);
 }
@@ -2836,13 +2840,18 @@ void mmc_start_host(struct mmc_host *host)
 		mmc_power_up(host);
 #ifdef CONFIG_MMC_DW_EXYNOS /* do detect change wifi only in DW_EXYNOS */
 	if (!strcmp("mmc1", mmc_hostname(host)))
-#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)
+#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE) || \
+    defined(CONFIG_BCM4343) || defined(CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined(CONFIG_BCM43454_MODULE)
 		printk("%s skip mmc_detect_change\n", mmc_hostname(host));
 #else
 		mmc_detect_change(host, 0);
 #endif
 #else
-#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)
+#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE) || \
+    defined(CONFIG_BCM4343) || defined(CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined(CONFIG_BCM43454_MODULE)
+
 	if (strcmp("mmc1", mmc_hostname(host)))
 #endif
 	mmc_detect_change(host, 0);

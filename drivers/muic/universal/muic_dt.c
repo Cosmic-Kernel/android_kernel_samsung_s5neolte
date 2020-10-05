@@ -191,6 +191,8 @@ int of_muic_dt(struct i2c_client *i2c, struct muic_platform_data *pdata)
 	muic_data_t *pmuic = i2c_get_clientdata(i2c);
 	int ret=0;
 
+	pr_info("%s\n", __func__);
+
 	if(!np_muic)
 		return -EINVAL;
 
@@ -228,6 +230,31 @@ int of_muic_dt(struct i2c_client *i2c, struct muic_platform_data *pdata)
 
 	return 0;
 }
+#if defined(CONFIG_MUIC_PINCTRL)
+int of_muic_pinctrl(struct i2c_client *i2c)
+{
+	struct pinctrl *muic_pinctrl;
+
+	pr_info("%s\n", __func__);
+
+	muic_pinctrl = devm_pinctrl_get_select(&i2c->dev, "muic_i2c_pins_default");
+	if (IS_ERR(muic_pinctrl)) {
+		if (PTR_ERR(muic_pinctrl) == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
+		pr_debug("Target does not use i2c pinctrl\n");
+		muic_pinctrl = NULL;
+	}
+	muic_pinctrl = devm_pinctrl_get_select(&i2c->dev, "muic_interrupt_pins_default");
+	if (IS_ERR(muic_pinctrl)) {
+		if (PTR_ERR(muic_pinctrl) == -EPROBE_DEFER)
+			return -EPROBE_DEFER;
+		pr_debug("Target does not use int pinctrl\n");
+		muic_pinctrl = NULL;
+	}
+
+	return 0;
+}
+#endif
 #endif
 
 int muic_set_gpio_uart_sel(int uart_sel)

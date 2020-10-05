@@ -79,6 +79,7 @@ enum sm5504_muic_reg {
 enum sm5504_muic_reg_item {
 	DEVID_VendorID = REG_ITEM(REG_DEVID, _BIT0, _MASK3),
 
+	CTRL_USBCHDEN	= REG_ITEM(REG_CTRL, _BIT6, _MASK1),
 	CTRL_SW_OPEN	= REG_ITEM(REG_CTRL, _BIT4, _MASK1),
 	CTRL_RAWDATA	= REG_ITEM(REG_CTRL, _BIT3, _MASK1),
 	CTRL_ManualSW	= REG_ITEM(REG_CTRL, _BIT2, _MASK1),
@@ -182,51 +183,34 @@ enum sm5504_muic_devt2{
 						CTRL_INT_MASK_MASK)
 
 #define INT2_UVLO_MASK		(0x1 << 1)
-
-struct reg_value_set {
-	int value;
-	char *alias;
-};
-
-#if 0
-/* ADC Scan Mode Values : b'1 */
-static struct reg_value_set sm5504_adc_scanmode_tbl[] = {
-	[ADC_SCANMODE_CONTINUOUS] = {0x01, "Periodic"},
-	[ADC_SCANMODE_ONESHOT]    = {0x00, "Oneshot."},
-	[ADC_SCANMODE_PULSE]      = {0x00, "Oneshot.."},
-};
-#endif
+#define REG_CTRL_INITIAL (CTRL_MASK | CTRL_MANUAL_SW_MASK)
 
 /*
  * Manual Switch
- * D- [7:5] / D+ [4:2]
- * 000: Open all / 001: USB / 011: UART
+ * D- [7:5] / D+ [4:2] / Vbus [1:0]
+ * 000: Open all / 001: USB / 010: AUDIO / 011: UART / 100: V_AUDIO
+ * 00: Vbus to Open / 01: Vbus to Charger / 10: Vbus to MIC / 11: Vbus to VBout
  */
 #define _D_OPEN	(0x0)
 #define _D_USB		(0x1)
 #define _D_UART	(0x3)
-#define _V_OPEN	(0x0)
-#define _V_CHARGER	(0x1)
-#define _V_MIC		(0x2)
 
 /* COM patch Values */
 #define COM_VALUE(dm) ((dm<<5) | (dm<<2))
 
 #define _COM_OPEN		COM_VALUE(_D_OPEN)
-#define _COM_UART		COM_VALUE(_D_UART)
-#define _COM_USB		COM_VALUE(_D_USB)
-#define _COM_AUDIO		COM_VALUE(_D_AUDIO)
+#define _COM_UART_AP		COM_VALUE(_D_UART)
+#define _COM_UART_CP		_COM_UART_AP
+#define _COM_USB_AP		COM_VALUE(_D_USB)
+#define _COM_USB_CP		_COM_USB_AP
 
-static int sm5504_com_value_tbl[] = {
+static int sm5703_com_value_tbl[] = {
 	[COM_OPEN]		= _COM_OPEN,
-	[COM_OPEN_WITH_V_BUS]	= _COM_OPEN,
-	[COM_UART_AP]		= _COM_UART,
-	[COM_UART_CP]		= _COM_UART,
-	[COM_USB_AP]		= _COM_USB,
-	[COM_USB_CP]		= _COM_USB,
+	[COM_UART_AP]		= _COM_UART_AP,
+	[COM_UART_CP]		= _COM_UART_CP,
+	[COM_USB_AP]		= _COM_USB_AP,
+	[COM_USB_CP]		= _COM_USB_CP,
 };
-
-#define REG_CTRL_INITIAL (CTRL_MASK | CTRL_MANUAL_SW_MASK)
 
 static regmap_t sm5504_muic_regmap_table[] = {
 	[REG_DEVID]	= {"DeviceID",	 0x01, 0x00, INIT_NONE},
@@ -258,7 +242,7 @@ static int sm5504_muic_ioctl(struct regmap_desc *pdesc,
 
 	switch (arg1) {
 	case GET_COM_VAL:
-		*arg2 = sm5504_com_value_tbl[*arg2];
+		*arg2 = sm5703_com_value_tbl[*arg2];
 		*arg3 = REG_MANSW1;
 		break;
 	case GET_CTLREG:
@@ -289,6 +273,10 @@ static int sm5504_muic_ioctl(struct regmap_desc *pdesc,
 		*arg3 = CHGTYPE_CHG_TYPE;
 		break;
 
+	case GET_RESID3:
+		*arg3 = CTRL_USBCHDEN;
+		break;
+
 	default:
 		ret = -1;
 		break;
@@ -317,20 +305,10 @@ static int sm5504_attach_ta(struct regmap_desc *pdesc)
 
 	do {
 		attr = REG_MANSW1 | _ATTR_OVERWRITE_M;
-		value = COM_OPEN_WITH_V_BUS;
+		value = _COM_OPEN;
 		ret = regmap_write_value(pdesc, attr, value);
 		if (ret < 0) {
 			pr_err("%s REG_MANSW1 write fail.\n", __func__);
-			break;
-		}
-
-		_REGMAP_TRACE(pdesc, 'w', ret, attr, value);
-
-		attr = REG_MANSW2 | _ATTR_OVERWRITE_M;
-		value = 0x10; /* CHG_DET low */
-		ret = regmap_write_value(pdesc, attr, value);
-		if (ret < 0) {
-			pr_err("%s REG_MANSW2 write fail.\n", __func__);
 			break;
 		}
 
@@ -362,16 +340,6 @@ static int sm5504_detach_ta(struct regmap_desc *pdesc)
 		ret = regmap_write_value(pdesc, attr, value);
 		if (ret < 0) {
 			pr_err("%s REG_MANSW1 write fail.\n", __func__);
-			break;
-		}
-
-		_REGMAP_TRACE(pdesc, 'w', ret, attr, value);
-
-		attr = REG_MANSW2 | _ATTR_OVERWRITE_M;
-		value = 0x00;
-		ret = regmap_write_value(pdesc, attr, value);
-		if (ret < 0) {
-			pr_err("%s REG_MANSW2 write fail.\n", __func__);
 			break;
 		}
 
@@ -453,8 +421,10 @@ static int sm5504_get_vps_data(struct regmap_desc *pdesc, void *pbuf)
 		break;
 	case SM5504_DEVT1_CAR_KIT_CHARGER:
 	case SM5504_DEVT1_DCP:
-		pvps->t.attached_dev = ATTACHED_DEV_TA_MUIC;
-		pr_info("%s : DEDICATED CHARGER DETECTED\n", MUIC_DEV_NAME);
+		if (ADC_CEA936ATYPE1_CHG != pvps->s.adc) {
+			pvps->t.attached_dev = ATTACHED_DEV_TA_MUIC;
+			pr_info("%s : DEDICATED CHARGER DETECTED\n", MUIC_DEV_NAME);
+		}
 		break;
 	case SM5504_DEVT1_USB_OTG:
 		pvps->t.attached_dev = ATTACHED_DEV_OTG_MUIC;
@@ -487,68 +457,6 @@ static int sm5504_get_vps_data(struct regmap_desc *pdesc, void *pbuf)
 	}
 
 	return 0;
-}
-
-static int sm5504_get_adc_scan_mode(struct regmap_desc *pdesc)
-{
-#if 0
-	struct reg_value_set *pvset;
-	int attr, value, mode = 0;
-
-	attr = MANSW2_SINGLE_MODE;
-	value = regmap_read_value(pdesc, attr);
-
-	for ( ; mode <ARRAY_SIZE(sm5504_adc_scanmode_tbl); mode++) {
-		pvset = &sm5504_adc_scanmode_tbl[mode];
-		if (pvset->value == value)
-			break;
-	}
-
-	pr_info("%s: [%2d]=%02x,%02x\n", __func__, mode, value, pvset->value);
-	pr_info("%s:       %s\n", __func__, pvset->alias);
-
-	return mode;
-#else
-	pr_info("%s: TBD\n", __func__);
-	return 0;
-#endif
-}
-
-static void sm5504_set_adc_scan_mode(struct regmap_desc *pdesc,
-		const int mode)
-{
-#if 0
-	struct reg_value_set *pvset;
-	int attr, ret, value;
-
-	if (mode > ADC_SCANMODE_PULSE) {
-		pr_err("%s Out of range(%d).\n", __func__, mode);
-		return;
-	}
-
-	pvset = &sm5504_adc_scanmode_tbl[mode];
-	pr_info("%s: [%2d] %s\n", __func__, mode, pvset->alias);
-
-	do {
-#define _ENABLE_PERIODIC_SCAN (0)
-#define _DISABLE_PERIODIC_SCAN (1)
-		value = pvset->value;
-		attr = CTRL_RAWDATA;
-		if (mode == ADC_SCANMODE_CONTINUOUS)
-			value = _ENABLE_PERIODIC_SCAN;
-		else
-			value = _DISABLE_PERIODIC_SCAN;
-
-		ret = regmap_write_value(pdesc, attr, value);
-		if (ret < 0) {
-			pr_err("%s CTRL_RAWDATA write fail.\n", __func__);
-			break;
-		}
-
-		_REGMAP_TRACE(pdesc, 'w', ret, attr, value);
-
-        } while (0);
-#endif
 }
 
 enum switching_mode_val{
@@ -631,10 +539,8 @@ static struct vendor_ops sm5504_muic_vendor_ops = {
 	.detach_ta = sm5504_detach_ta,
 	.get_switch = sm5504_get_switching_mode,
 	.set_switch = sm5504_set_switching_mode,
-	.set_adc_scan_mode = sm5504_set_adc_scan_mode,
-	.get_adc_scan_mode = sm5504_get_adc_scan_mode,
-	.set_rustproof = sm5504_set_rustproof,
 	.get_vps_data = sm5504_get_vps_data,
+	.set_rustproof = sm5504_set_rustproof,
 };
 
 static struct regmap_desc sm5504_muic_regmap_desc = {

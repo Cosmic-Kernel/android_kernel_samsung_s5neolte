@@ -491,7 +491,10 @@ struct dw_mci_board {
 	*       dev is pointer to platform device of the host controller,
 	*       state is new state of the card (0 - removed, 1 - inserted).
 	*/
-#if defined(CONFIG_BCM43455) || defined (CONFIG_BCM43455_MODULE)
+#if defined(CONFIG_BCM43455) || defined (CONFIG_BCM43455_MODULE)|| \
+    defined(CONFIG_BCM4343) || defined (CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined (CONFIG_BCM43454_MODULE)
+
 	int (*ext_cd_init)(void (*notify_func)
 			(void *dev_id, int state), void *dev_id);
 	int (*ext_cd_cleanup)(void (*notify_func)

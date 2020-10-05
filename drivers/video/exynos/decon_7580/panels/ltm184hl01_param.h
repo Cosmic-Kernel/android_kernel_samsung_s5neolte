@@ -31,17 +31,10 @@ static const struct LP8558_rom_data LP8558_eprom_drv_arr_init[] = {
 	{0xA0, 0x65},/* Change LED Current for 27mA*/
 	{0xA1,	0x6E},/*Change LED Current for 27mA*/
 	{0xA6,	0x80},/*frequency setting for 1.25MHz*/
-	{0xA9,	0xE0},/*Boost MAX setting for max 43V */
-	{0x00,	0xBD},/*Apply BRT setting for normal for 20mA*/
+	{0xA9,	0xC0},/*Boost MAX setting for max 39V */
+	{0x00,	0xCB},/*Apply BRT setting for normal for 21.5mA*/
 };
 
-static const struct LP8558_rom_data LP8558_eprom_drv_arr_outdoor[] = {
-	{0x00,	0xD4},/*Apply BRT setting for outdoor 22.5mA*/
-};
-
-static const struct LP8558_rom_data LP8558_eprom_drv_arr_normal[] = {
-	{0x00,	0xBD},/*Apply BRT setting for normal for 20mA*/
-};
 
 /*to fix build break*/
 static const unsigned char SEQ_TEST_KEY_ON_F0[] = {

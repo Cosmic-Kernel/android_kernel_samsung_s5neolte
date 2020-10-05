@@ -143,7 +143,7 @@
 
 		PIN_SLP(gpd2-0, INPUT, NONE);	/* IF_PMIC_SCL_1P8 */
 		PIN_SLP(gpd2-1, INPUT, NONE);	/* IF_PMIC_SDA_1P8 */
-		PIN_SLP(gpd2-2, INPUT, NONE);	/* UART_SEL */
+		PIN_SLP(gpd2-2, PREV, NONE);	/* UART_SEL */
 		PIN_SLP(gpd2-3, PREV, NONE);	/* SUB_MIC_BIAS_EN */
 		PIN_SLP(gpd2-4, INPUT, DOWN);	/* PCD_INT */
 		PIN_SLP(gpd2-6, INPUT, DOWN);	/* GPS_EN */

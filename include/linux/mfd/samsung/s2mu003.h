@@ -113,6 +113,7 @@ typedef struct s2mu003_charger_platform_data {
 	int chg_float_voltage;
 	char *charger_name;
 	uint32_t is_1MHz_switching:1;
+	bool always_enable;
 	/* 2nd full check */
 	sec_battery_full_charged_t full_check_type_2nd;
 } s2mu003_charger_platform_data_t;

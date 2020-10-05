@@ -24,7 +24,7 @@
 #define BT532_TS_DEVICE		"bt532_ts_device"
 
 #ifdef CONFIG_SEC_DEBUG_TSP_LOG
-#include <mach/sec_debug.h>
+#include <linux/sec_debug.h>
 
 #define tsp_debug_dbg(mode, dev, fmt, ...) \
 ({ \
@@ -102,23 +102,31 @@ struct bt532_ts_platform_data {
 	u32		gpio_scl;
 	u32		gpio_sda;
 	u32		gpio_ldo_en;
-	u32		gpio_led_en;
 	int 		(*tsp_power)(void *data, bool on);
 	u16		x_resolution;
 	u16		y_resolution;
 	u16		page_size;
 	u8		orientation;
+	bool		support_touchkey;
+	bool		support_spay;
 	const char *project_name;
 	void (*register_cb)(void *);
 
 	const char *regulator_dvdd;
 	const char *regulator_avdd;
+	const char *regulator_tkled;
 	const char *firmware_name;
+	const char *chip_name;
 	struct pinctrl *pinctrl;
 };
 
 extern struct class *sec_class;
 
 void tsp_charger_infom(bool en);
+
+#ifdef CONFIG_TRUSTONIC_TRUSTED_UI
+extern void trustedui_mode_on(void);
+extern void trustedui_mode_off(void);
+#endif
 
 #endif /* LINUX_BT532_TS_H */

@@ -20,6 +20,12 @@
 #include "../vendor/fimc-is-vendor-config_carmen2.h"
 #elif defined(CONFIG_CAMERA_GV)
 #include "../vendor/fimc-is-vendor-config_gv.h"
+#elif defined(CONFIG_CAMERA_A8C)
+#include "../vendor/fimc-is-vendor-config_a8c.h"
+#elif defined(CONFIG_CAMERA_A3X)
+#include "../vendor/fimc-is-vendor-config_a3x.h"
+#elif defined(CONFIG_CAMERA_A5X) || defined(CONFIG_CAMERA_A7X)
+#include "../vendor/fimc-is-vendor-config_a5x.h"
 #else /* CONFIG_CAMERA_S5NEO */
 #include "../vendor/fimc-is-vendor-config_s5neo.h"
 #endif
@@ -207,7 +213,9 @@
 #define DBG_PER_FRAME
 /* #define DBG_STREAMING */
 #define DBG_STREAM_ID 0xF
-#define PANIC_ENABLE
+#define FW_PANIC_ENABLE
+/* #define SENSOR_PANIC_ENABLE */
+/* #define PANIC_ENABLE */
 /* #define FIXED_FPS_DEBUG */
 #define FIXED_FPS_VALUE 5
 /* #define DBG_CSIISR */

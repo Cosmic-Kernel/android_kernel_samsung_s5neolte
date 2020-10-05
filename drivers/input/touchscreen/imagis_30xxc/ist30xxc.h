@@ -15,12 +15,24 @@
 
 #ifndef __IST30XXC_H__
 #define __IST30XXC_H__
+
 #ifdef USE_TSP_TA_CALLBACKS
 #include <linux/input/tsp_ta_callback.h>
 #endif
+
+#if defined(CONFIG_VBUS_NOTIFIER) || defined(CONFIG_MUIC_NOTIFIER)
+#include <linux/muic/muic.h>
+#include <linux/muic/muic_notifier.h>
+#include <linux/vbus_notifier.h>
+#endif
+
 #ifdef CONFIG_INPUT_BOOSTER
 #include <linux/input/input_booster.h>
 #endif
+
+extern unsigned int lcdtype;
+
+#define USE_OPEN_CLOSE
 
 /*
  * Support F/W ver : IST30xxC v1.0.0.0
@@ -36,7 +48,11 @@
 #define IMAGIS_IST3044C			(4) /* 3044C */
 #define IMAGIS_IST3048C			(5) /* 3048C */
 
-#define IMAGIS_TSP_IC			IMAGIS_IST3038C
+#if defined(CONFIG_TOUCHSCREEN_IST3026C)
+#define IMAGIS_TSP_IC			IMAGIS_IST3026C
+#elif defined(CONFIG_TOUCHSCREEN_IST3032C)
+#define IMAGIS_TSP_IC			IMAGIS_IST3032C
+#endif
 
 /* SEC defined [*/
 #define FIRMWARE_PATH_LENGTH		64
@@ -78,11 +94,11 @@
 #endif
 
 /* IST30XX FUNCTION ENABLE & DISABLE */
-#define IST30XX_INTERNAL_BIN		(0)
+#define IST30XX_INTERNAL_BIN		(1)
 #define IST30XX_CHECK_CALIB		(0)
 #if IST30XX_INTERNAL_BIN
-#if (IMAGIS_TSP_IC < IMAGIS_IST3038C)
-#define IST30XX_MULTIPLE_TSP		(0)
+#if defined(CONFIG_TOUCHSCREEN_IST3026C)	//novel
+#define IST30XX_MULTIPLE_TSP		(1)
 #endif
 #define IST30XX_UPDATE_BY_WORKQUEUE	(0)
 #define IST30XX_UPDATE_DELAY		(3 * HZ)
@@ -100,7 +116,13 @@
 #endif
 
 #define IST30XX_TA_RESET		(1)
+
+#if defined(CONFIG_TOUCHSCREEN_IST3026C) || defined(CONFIG_TOUCHSCREEN_IST3032C)
+#define IST30XX_USE_KEY			(0)
+#else
 #define IST30XX_USE_KEY			(1)
+#endif
+
 #define IST30XX_DEBUG			(1)
 #define IST30XX_CMCS_TEST		(1)
 #define IST30XX_GESTURE			(0)
@@ -149,7 +171,8 @@ enum ist30xx_reliability_commands {
 	TEST_RAW_ALL_DATA = 0,
 	TEST_CM_ALL_DATA,
 	TEST_CS_ALL_DATA,
-	TEST_SLOPE_ALL_DATA,
+	TEST_SLOPE0_ALL_DATA,
+	TEST_SLOPE1_ALL_DATA,
 };
 
 /* Debug message */
@@ -163,12 +186,73 @@ enum ist30xx_reliability_commands {
 #define IST30XX_DEBUG_TAG		"[ TSP ]"
 #define IST30XX_DEBUG_LEVEL		DEV_NOTI
 
+#ifdef CONFIG_SEC_DEBUG_TSP_LOG
+#include <linux/sec_debug.h>
+#endif
+
+#ifdef CONFIG_SEC_DEBUG_TSP_LOG
+#define tsp_err(fmt, ...)	\
+({	\
+	if (IST30XX_DEBUG_LEVEL<DEV_ERR)	\
+		tsp_printk(DEV_ERR, fmt, ## __VA_ARGS__);	\
+	else{	\
+		tsp_printk(DEV_ERR, fmt, ## __VA_ARGS__);	\
+		sec_debug_tsp_log(fmt, ## __VA_ARGS__);	\
+	}	\
+})
+#define tsp_warn(fmt, ...)	\
+({	\
+	if (IST30XX_DEBUG_LEVEL<DEV_WARN)		\
+		tsp_printk(DEV_WARN, fmt, ## __VA_ARGS__);	\
+	else{	\
+		tsp_printk(DEV_WARN, fmt, ## __VA_ARGS__);	\
+		sec_debug_tsp_log(fmt, ## __VA_ARGS__);	\
+	}	\
+})
+#define tsp_info(fmt, ...)	\
+({	\
+	if (IST30XX_DEBUG_LEVEL<DEV_INFO)		\
+		tsp_printk(DEV_INFO, fmt, ## __VA_ARGS__);	\
+	else{	\
+		tsp_printk(DEV_INFO, fmt, ## __VA_ARGS__);	\
+		sec_debug_tsp_log(fmt, ## __VA_ARGS__);	\
+	}	\
+})
+#define tsp_noti(fmt, ...)	\
+({	\
+	if (IST30XX_DEBUG_LEVEL<DEV_NOTI)		\
+		tsp_printk(DEV_NOTI, fmt, ## __VA_ARGS__);	\
+	else{	\
+		tsp_printk(DEV_NOTI, fmt, ## __VA_ARGS__);	\
+		sec_debug_tsp_log(fmt, ## __VA_ARGS__);	\
+	}	\
+})
+#define tsp_debug(fmt, ...)	\
+({	\
+	if (IST30XX_DEBUG_LEVEL<DEV_DEBUG)		\
+		tsp_printk(DEV_DEBUG, fmt, ## __VA_ARGS__);	\
+	else{	\
+		tsp_printk(DEV_DEBUG, fmt, ## __VA_ARGS__);	\
+		sec_debug_tsp_log(fmt, ## __VA_ARGS__);	\
+	}	\
+})
+#define tsp_verb(fmt, ...)	\
+({	\
+	if (IST30XX_DEBUG_LEVEL<DEV_VERB)		\
+		tsp_printk(DEV_VERB, fmt, ## __VA_ARGS__);	\
+	else{	\
+		tsp_printk(DEV_VERB, fmt, ## __VA_ARGS__);	\
+		sec_debug_tsp_log(fmt, ## __VA_ARGS__);	\
+	}	\
+})
+#else
 #define tsp_err(fmt, ...)		tsp_printk(DEV_ERR, fmt, ## __VA_ARGS__)
 #define tsp_warn(fmt, ...)		tsp_printk(DEV_WARN, fmt, ## __VA_ARGS__)
 #define tsp_info(fmt, ...)		tsp_printk(DEV_INFO, fmt, ## __VA_ARGS__)
 #define tsp_noti(fmt, ...)		tsp_printk(DEV_NOTI, fmt, ## __VA_ARGS__)
 #define tsp_debug(fmt, ...)		tsp_printk(DEV_DEBUG, fmt, ## __VA_ARGS__)
 #define tsp_verb(fmt, ...)		tsp_printk(DEV_VERB, fmt, ## __VA_ARGS__)
+#endif
 
 /* i2c setting */
 /* I2C Device info */
@@ -205,6 +289,7 @@ enum ist30xx_reliability_commands {
 #define IST30XX_REG_TSPTYPE		IST30XX_DA_ADDR(0x40002010)
 /* SEC defined [ */
 #define IST30XX_REG_XY_RES		IST30XX_DA_ADDR(0x40)
+#define IST30XX_REG_XY_SWAP		IST30XX_DA_ADDR(0x5C)
 /* SEC defined ] */
 
 /* HIB register */
@@ -301,7 +386,7 @@ struct ist30xx_status {
 	int update_result;
 	int calib;
 	int calib_msg;
-	int cmcs;
+	u32 cmcs;
 	bool event_mode;
 	bool noise_mode;
 };
@@ -436,6 +521,7 @@ struct ist30xx_dt_data {
 	const char *tsp_vdd_name;
 	struct regulator *tsp_power;
 	int fw_bin;
+	int octa_hw;
 	const char *ic_version;
 	const char *project_name;
 	char fw_path[FIRMWARE_PATH_LENGTH];
@@ -466,8 +552,8 @@ struct ist30xx_data {
 	u32 max_keys;
 	u32 t_status;
 	finger_info fingers[IST30XX_MAX_MT_FINGERS];
-	u32 lx;
-	u32 ly;
+	u32 lx[IST30XX_MAX_MT_FINGERS];
+	u32 ly[IST30XX_MAX_MT_FINGERS];
 	volatile bool irq_working;
 	u32 irq_enabled;
 	bool initialized;
@@ -507,6 +593,14 @@ struct ist30xx_data {
 #ifdef USE_TSP_TA_CALLBACKS
 	struct tsp_callbacks	callbacks;
 #endif
+#ifdef CONFIG_MUIC_NOTIFIER
+	struct notifier_block muic_nb;
+#endif
+#ifdef CONFIG_VBUS_NOTIFIER
+	struct notifier_block vbus_nb;
+#endif
+	int lcd_id;
+
 };
 
 extern struct mutex ist30xx_mutex;

@@ -38,7 +38,7 @@
 			compatible = "exynos5433-ion,video";
 			secure;
 			reusable;
-			reg = <0x0 0xbb000000 0x0 0x4000000>;
+			reg = <0x0 0xb9800000 0x0 0x5800000>;
 			id = <11>;
 			compat-id = <4 5 6 7>;
 		};
@@ -51,24 +51,16 @@
 			id = <1>;
 		};
 
-		video_ext2 {
-			compatible = "exynos5433-ion,video_ext2";
-			secure;
-			reusable;
-			reg = <0x0 0xb9400000 0x0 0x1800000>;
-			id = <3>;
-		};
-
 		mfc_nfw {
 			compatible = "exynos5433-ion,mfc_nfw";
-			reg = <0x0 0xbae00000 0x0 0x110000>;
+			reg = <0x0 0xb9600000 0x0 0x110000>;
 			id = <12>;
 		};
 
 		mfc_fw {
 			compatible = "exynos5433-ion,mfc_fw";
 			secure;
-			reg = <0x0 0xbac00000 0x0 0x200000>;
+			reg = <0x0 0xb9400000 0x0 0x200000>;
 			id = <8>;
 		};
 

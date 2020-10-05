@@ -2602,12 +2602,6 @@ static int inet6_addr_del(struct net *net, int ifindex, const struct in6_addr *p
 			read_unlock_bh(&idev->lock);
 
 			ipv6_del_addr(ifp);
-
-			/* If the last address is deleted administratively,
-			   disable IPv6 on this interface.
-			 */
-			if (list_empty(&idev->addr_list))
-				addrconf_ifdown(idev->dev, 1);
 			return 0;
 		}
 	}
@@ -2812,6 +2806,8 @@ static void addrconf_dev_config(struct net_device *dev)
 	if ((dev->type != ARPHRD_ETHER) &&
 	    (dev->type != ARPHRD_FDDI) &&
 	    (dev->type != ARPHRD_ARCNET) &&
+	    (dev->type != ARPHRD_RAWIP) &&
+	    (dev->type != ARPHRD_PPP) &&
 	    (dev->type != ARPHRD_INFINIBAND) &&
 	    (dev->type != ARPHRD_IEEE802154) &&
 	    (dev->type != ARPHRD_IEEE1394)) {

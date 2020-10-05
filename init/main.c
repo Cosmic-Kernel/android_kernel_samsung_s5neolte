@@ -107,6 +107,10 @@ static inline void mark_rodata_ro(void) { }
 extern void tc_init(void);
 #endif
 
+#if defined(CONFIG_USE_HOST_FD_LIBRARY)
+extern void *fd_vaddr;
+#endif
+
 #ifdef CONFIG_KNOX_KAP
 int boot_mode_security;
 EXPORT_SYMBOL(boot_mode_security);
@@ -516,7 +520,11 @@ static void rkp_init(void)
 	init.extra_memory_size = 0x600000;
 	init._srodata = (u64) __start_rodata;
 	init._erodata =(u64) __end_rodata;
+#if defined(CONFIG_USE_HOST_FD_LIBRARY)
+	init.large_memory = (u32) virt_to_phys(fd_vaddr);
+#else
 	init.large_memory = 0;
+#endif
 	rkp_call(RKP_INIT, (u64)&init, 0, 0, 0, 0);
 	rkp_started = 1;
 	return;
@@ -602,6 +610,8 @@ asmlinkage void __init start_kernel(void)
 		vmm_init();
 	else
 		vmm_disable();
+#else
+	vmm_init();
 #endif //CONFIG_KNOX_KAP
 #endif //CONFIG_TIMA_RKP
 	jump_label_init();

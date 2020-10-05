@@ -978,6 +978,11 @@ int dsim_reg_set_hs_clock(u32 id, struct decon_lcd *lcd, u32 en)
 		dsim_reg_set_cmd_transfer_mode(id, 0);
 		dsim_reg_set_data_transfer_mode(id, 0);
 
+		dsim_reg_set_standby(id, lcd, 1);
+
+		/* for preventing 2C miss issue */
+		dsim_reg_funtion_reset(id);
+
 		dsim_reg_enable_hs_clock(id, 1);
 
 		if (!is_non) {
@@ -985,11 +990,6 @@ int dsim_reg_set_hs_clock(u32 id, struct decon_lcd *lcd, u32 en)
 			if (ret)
 				return ret;
 		}
-
-		dsim_reg_set_standby(id, lcd, 1);
-
-		/* for preventing 2C miss issue */
-		dsim_reg_funtion_reset(id);
 	} else {
 		dsim_reg_set_standby(id, lcd, 0);
 		dsim_reg_enable_hs_clock(id, 0);

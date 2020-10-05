@@ -13,14 +13,10 @@
 #ifndef __AID_DIMMING_H__
 #define __AID_DIMMING_H__
 
-#if defined(CONFIG_PANEL_S6E3FA2_DYNAMIC)
-#include "s6e3fa2_dimming.h"
-#elif defined(CONFIG_PANEL_S6E3FA3_DYNAMIC)
-#include "s6e3fa3_dimming.h"
-#elif defined(CONFIG_PANEL_S6E3HF2_DYNAMIC)
-#include "s6e3hf2_wqhd_dimming.h"
-#elif defined(CONFIG_PANEL_EA8064G_DYNAMIC)
+#if defined(CONFIG_PANEL_EA8064G_DYNAMIC)
 #include "ea8064g_dimming.h"
+#elif defined(CONFIG_PANEL_EA8061_DYNAMIC)
+#include "ea8061_dimming.h"
 #else
 #error "ERROR !! Check LCD Panel Header File"
 #endif
@@ -43,13 +39,11 @@ struct dim_data {
 
 struct SmtDimInfo {
 	unsigned int br;
-	unsigned int refBr;
-	const unsigned int *cGma;
-	signed char *rTbl;
 	signed char *cTbl;
 	unsigned char *aid;
 	unsigned char *elvAcl;
 	unsigned char *elv;
+	unsigned char *m_gray;
 	unsigned char gamma[OLED_CMD_GAMMA_CNT];
 };
 

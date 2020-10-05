@@ -556,7 +556,7 @@ static int parse_dt_iodevs_pdata(struct device *dev, struct device_node *np,
 		if (count_bits(iod->links) > 1)
 			mif_dt_read_enum(child, "iod,tx_link", iod->tx_link);
 		mif_dt_read_u32(child, "iod,attrs", iod->attrs);
-		/* mif_dt_read_string(child, "iod,app", iod->app); */
+
 		if (iod->attrs & IODEV_ATTR(ATTR_SBD_IPC)) {
 			mif_dt_read_u32(child, "iod,ul_num_buffers",
 					iod->ul_num_buffers);
@@ -567,6 +567,10 @@ static int parse_dt_iodevs_pdata(struct device *dev, struct device_node *np,
 			mif_dt_read_u32(child, "iod,dl_buffer_size",
 					iod->dl_buffer_size);
 		}
+
+		if (iod->attrs & IODEV_ATTR(ATTR_OPTION_REGION))
+			mif_dt_read_string(child, "iod,option_region",
+					iod->option_region);
 
 		i++;
 	}
@@ -645,9 +649,9 @@ enum mif_sim_mode {
 
 static int simslot_count(struct seq_file *m, void *v)
 {
-	enum mif_sim_mode mode = (enum mif_sim_mode)m->private;
+	unsigned long value = (unsigned long)m->private;
 
-	seq_printf(m, "%u\n", mode);
+	seq_printf(m, "%u\n", (unsigned int)value);
 	return 0;
 }
 
@@ -666,18 +670,18 @@ static const struct file_operations simslot_count_fops = {
 static enum mif_sim_mode get_sim_mode(struct device_node *of_node)
 {
 	enum mif_sim_mode mode = MIF_SIM_SINGLE;
-	int gpio_ds_det;
+	int gpio_ds_det, gpio_tray_det;
 	int retval;
 
 	gpio_ds_det = of_get_named_gpio(of_node, "mif,gpio_ds_det", 0);
 	if (!gpio_is_valid(gpio_ds_det)) {
-		mif_err("DT error: failed to get sim mode\n");
+		mif_err("DT error: failed to get gpio ds_det\n");
 		goto make_proc;
 	}
 
 	retval = gpio_request(gpio_ds_det, "DS_DET");
 	if (retval) {
-		mif_err("Failed to reqeust GPIO(%d)\n", retval);
+		mif_err("Failed to reqeust ds_det GPIO(%d)\n", retval);
 		goto make_proc;
 	} else {
 		gpio_direction_input(gpio_ds_det);
@@ -693,8 +697,33 @@ static enum mif_sim_mode get_sim_mode(struct device_node *of_node)
 make_proc:
 	if (!proc_create_data("simslot_count", 0, NULL, &simslot_count_fops,
 			(void *)(long)mode)) {
-		mif_err("Failed to create proc\n");
+		mif_err("Failed to create ds_det proc\n");
 		mode = MIF_SIM_SINGLE;
+	}
+
+	/* tray_det */
+	gpio_tray_det = of_get_named_gpio(of_node, "mif,gpio_tray_det", 0);
+	if (!gpio_is_valid(gpio_tray_det)) {
+		mif_err("DT error: failed to get gpio tray_det\n");
+		goto make_tray_proc;
+	}
+
+	retval = gpio_request(gpio_tray_det, "TRAY_DET");
+	if (retval) {
+		mif_err("Failed to reqeust tray_det GPIO(%d)\n", retval);
+		goto make_tray_proc;
+	} else {
+		gpio_direction_input(gpio_tray_det);
+	}
+
+	retval = gpio_get_value(gpio_tray_det);
+	mif_info("tray_count: %d\n", retval);
+	gpio_free(gpio_tray_det);
+
+make_tray_proc:
+	if (!proc_create_data("tray_count", 0, NULL, &simslot_count_fops,
+			(void *)(long)retval)) {
+		mif_err("Failed to create tray proc\n");
 	}
 
 	return mode;
@@ -712,7 +741,8 @@ static int modem_probe(struct platform_device *pdev)
 	struct link_device *ld;
 	enum mif_sim_mode sim_mode;
 
-	mif_err("%s: +++\n", pdev->name);
+	mif_err("%s: +++ (%s)\n",
+		pdev->name, CONFIG_OPTION_REGION);
 
 	if (dev->of_node) {
 		pdata = modem_if_parse_dt_pdata(dev);
@@ -769,6 +799,11 @@ static int modem_probe(struct platform_device *pdev)
 			pdata->iodevs[i].attrs & IODEV_ATTR(ATTR_DUALSIM))
 			continue;
 
+		if (pdata->iodevs[i].attrs & IODEV_ATTR(ATTR_OPTION_REGION)
+				&& strcmp(pdata->iodevs[i].option_region,
+					CONFIG_OPTION_REGION))
+			continue;
+
 		iod[i] = create_io_device(pdev, &pdata->iodevs[i], msd,
 					  modemctl, pdata);
 		if (!iod[i]) {
@@ -816,7 +851,7 @@ static void modem_shutdown(struct platform_device *pdev)
 	mc->ops.modem_shutdown(mc);
 	mc->phone_state = STATE_OFFLINE;
 
-	evt_log(0, "%s(%s)\n", mc->name, FUNC);
+	mif_err("%s\n", mc->name);
 }
 
 static int modem_suspend(struct device *pdev)
@@ -839,7 +874,7 @@ static int modem_suspend(struct device *pdev)
 	mbox_set_interrupt(mc->int_pda_active);
 #endif
 
-	evt_log(0, "%s: %s\n", FUNC, mc->name);
+	mif_err("%s\n", mc->name);
 
 	return 0;
 }
@@ -871,7 +906,7 @@ static int modem_resume(struct device *pdev)
 	mbox_set_interrupt(mc->int_pda_active);
 #endif
 
-	evt_log(0, "%s: %s\n", FUNC, mc->name);
+	mif_err("%s\n", mc->name);
 
 	return 0;
 }

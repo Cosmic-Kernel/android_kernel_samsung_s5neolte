@@ -1514,7 +1514,6 @@ static int vidioc_s_fmt_vid_out_mplane(struct file *file, void *priv,
 	spin_lock_irq(&dev->condlock);
 	set_bit(ctx->num, &dev->ctx_work_bits);
 	spin_unlock_irq(&dev->condlock);
-	s5p_mfc_clean_ctx_int_flags(ctx);
 	s5p_mfc_try_run(dev);
 	if (s5p_mfc_wait_for_done_ctx(ctx,
 			S5P_FIMV_R2H_CMD_OPEN_INSTANCE_RET)) {
@@ -1891,6 +1890,8 @@ static int dec_ext_info(struct s5p_mfc_ctx *ctx)
 		val |= DEC_SET_DYNAMIC_DPB;
 	if (FW_HAS_LAST_DISP_INFO(dev))
 		val |= DEC_SET_LAST_FRAME_INFO;
+	if (FW_SUPPORT_SKYPE(dev))
+		val |= DEC_SET_SKYPE_FLAG;
 
 	return val;
 }
@@ -2000,6 +2001,9 @@ static int get_ctrl_val(struct s5p_mfc_ctx *ctx, struct v4l2_control *ctrl)
 		break;
 	case V4L2_CID_MPEG_MFC_GET_EXT_INFO:
 		ctrl->value = dec_ext_info(ctx);
+		break;
+	case V4L2_CID_MPEG_MFC_GET_DRIVER_INFO:
+		ctrl->value = MFC_DRIVER_INFO;
 		break;
 	default:
 		list_for_each_entry(ctx_ctrl, &ctx->ctrls, list) {

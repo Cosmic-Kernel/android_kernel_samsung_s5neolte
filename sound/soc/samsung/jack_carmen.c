@@ -74,13 +74,10 @@ static ssize_t earjack_select_jack_store(struct device *dev,
 static ssize_t earjack_mic_adc_show(struct device *dev,
 	struct device_attribute *attr, char *buf)
 {
-	int adc;
+	struct cod3022x_priv *cod3022x = dev_get_drvdata(dev);
+	struct cod3022x_jack_det *jackdet = &cod3022x->jack_det;
 
-	/* TO DO
-	 * need to implement get adc value from cod3022x chip */
-	adc = 0;
-
-	return sprintf(buf, "%d\n", adc);
+	return sprintf(buf, "%d\n", jackdet->adc_val);
 }
 
 static ssize_t earjack_mic_adc_store(struct device *dev,

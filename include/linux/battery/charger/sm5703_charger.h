@@ -53,11 +53,12 @@ enum {
 #define SM5703_OPERATION_MODE_FLASH_BOOST_MODE      0x06//110
 #define SM5703_OPERATION_MODE_USB_OTG_MODE          0x07//111
 
-#define SM5703_BSTOUT       		0x0F
-#define SM5703_BSTOUT_MASK       	0x0F
+#define SM5703_BSTOUT				0x0F
+#define SM5703_BSTOUT_MASK			0x0F
 #define SM5703_BSTOUT_SHIFT			0
 
 #define SM5703_BSTOUT_4P5           0x05
+#define SM5703_BSTOUT_5P0           0x0A
 #define SM5703_BSTOUT_5P1           0x0B
 
 #define SM5703_AUTOSTOP             0x1
@@ -103,11 +104,9 @@ enum {
 #define SM5703_BST_IQ3LIMIT_MASK        0x80
 #define SM5703_BST_IQ3LIMIT_SHIFT       0x7
 
-#define START_VBUSLIMIT_DELAY			1200
-#define VBUSLIMIT_DELAY					200
-#define REDUCE_CURRENT_STEP				50
+#define REDUCE_CURRENT_STEP				100
 #define MINIMUM_INPUT_CURRENT			300
-#define SLOW_CHARGING_CURRENT_STANDARD	1050
+#define SLOW_CHARGING_CURRENT_STANDARD	999
 #define SIOP_INPUT_LIMIT_CURRENT		1200
 
 extern sec_battery_platform_data_t sec_battery_pdata;

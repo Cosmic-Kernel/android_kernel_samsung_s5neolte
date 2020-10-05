@@ -597,19 +597,17 @@ static void mxt_report_input_data(struct mxt_data *data)
 #if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
 #if TSP_USE_PALM_FLAG
 		if (data->fingers[i].state == MXT_STATE_PRESS) {
-			tsp_debug_err(true, &data->client->dev, "[P][%d]: T[%d][%d] X[%4d],Y[%4d] M/m[%2d/%2d] P[%d][%X/%X]\n",
+			tsp_debug_err(true, &data->client->dev, "[P][%d]: T[%d][%d] X[%4d],Y[%4d] M/m[%2d/%2d] P[%d]\n",
 				i, data->fingers[i].type, data->fingers[i].event,
 				data->fingers[i].x, data->fingers[i].y,
-				data->fingers[i].m, data->fingers[i].n, data->palm,
-				data->info.version, data->info.build);
+				data->fingers[i].m, data->fingers[i].n, data->palm);
 		}
 #else
 		if (data->fingers[i].state == MXT_STATE_PRESS) {
-			tsp_debug_err(true, &data->client->dev, "[P][%d]: T[%d][%d] X[%4d],Y[%4d] M/m[%2d/%2d][%X/%X]\n",
+			tsp_debug_err(true, &data->client->dev, "[P][%d]: T[%d][%d] X[%4d],Y[%4d] M/m[%2d/%2d]\n",
 				i, data->fingers[i].type, data->fingers[i].event,
 				data->fingers[i].x, data->fingers[i].y,
-				data->fingers[i].m, data->fingers[i].n,
-				data->info.version, data->info.build);
+				data->fingers[i].m, data->fingers[i].n);
 		}
 #endif
 #else	/*!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)*/
@@ -620,11 +618,16 @@ static void mxt_report_input_data(struct mxt_data *data)
 #endif /*!defined(CONFIG_SAMSUNG_PRODUCT_SHIP)*/
 
 		else if (data->fingers[i].state == MXT_STATE_RELEASE)
+#if !defined(CONFIG_SAMSUNG_PRODUCT_SHIP)
+			tsp_debug_err(true, &data->client->dev, "[R][%d]: T[%d][%d] M[%d] [%X/%X][%s%s]\n",
+				i, data->fingers[i].type, data->fingers[i].event,
+				data->fingers[i].mcount, data->info.version, data->info.build,
+				data->pdata->paneltype == NULL ? "": data->pdata->paneltype, data->config_date);
+#else
 			tsp_debug_err(true, &data->client->dev, "[R][%d]: T[%d][%d] M[%d]\n",
 				i, data->fingers[i].type, data->fingers[i].event,
 				data->fingers[i].mcount);
-
-
+#endif
 		if (data->fingers[i].state == MXT_STATE_RELEASE) {
 			data->fingers[i].state = MXT_STATE_INACTIVE;
 			data->fingers[i].mcount = 0;
@@ -1174,7 +1177,7 @@ static irqreturn_t mxt_irq_thread(int irq, void *ptr)
 				mxt_treat_T100_object(data, &message);
 				break;
 			default:
-				tsp_debug_info(true, dev, "Untreated Object type[%d]\tmessage[0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x]\n",
+				tsp_debug_dbg(true, dev, "Untreated Object type[%d]\tmessage[0x%x 0x%x 0x%x 0x%x 0x%x 0x%x 0x%x]\n",
 					type, message.message[0],
 					message.message[1], message.message[2],
 					message.message[3], message.message[4],
@@ -2010,7 +2013,6 @@ static void mxt_print_ic_version(struct mxt_data *data)
 	struct i2c_client *client = data->client;
 	struct mxt_object *user_object;
 
-	char date[10] = {0};
 	u32 current_crc;
 	int ret = 0;
 
@@ -2025,10 +2027,10 @@ static void mxt_print_ic_version(struct mxt_data *data)
 		tsp_debug_err(true, &client->dev, "fail to get object_info\n");
 		return;
 	}
-	mxt_read_mem(data, user_object->start_address, MXT_CONFIG_VERSION_LENGTH, date);
+	mxt_read_mem(data, user_object->start_address, MXT_CONFIG_VERSION_LENGTH, data->config_date);
 
 	tsp_debug_info(true, &client->dev, "%s : TSP IC Ver : [0x%X/0x%X][%s][0x%X]\n",
-		__func__, data->info.version, data->info.build, date, current_crc);
+		__func__, data->info.version, data->info.build, data->config_date, current_crc);
 }
 
 /* fw config update */
@@ -2129,6 +2131,90 @@ load_fw:
 
 	return 0;
 }
+
+static int check_signal_limit(struct mxt_data *data)
+{
+	struct device *dev = &data->client->dev;
+	struct mxt_message message;
+	struct mxt_object *object;
+	int error;
+	int retry_cnt = 2;
+
+	if (data->objects == NULL){
+		tsp_debug_info(true, dev, "%s object is NULL!\n", __func__);
+
+		mxt_read_id_info(data);
+
+		data->objects = kcalloc(data->info.object_num,
+					sizeof(struct mxt_object), GFP_KERNEL);
+		if (!data->objects) {
+			tsp_debug_err(true, dev, "%s : Failed to allocate memory\n",__func__);
+		}
+
+		/* Get object table infomation */
+		mxt_get_object_table(data);
+	}
+
+	object = mxt_get_object(data, MXT_GEN_COMMANDPROCESSOR_T6);
+	if (!object)
+		return -EIO;
+
+	/* send calibration command to the chip */
+	mxt_write_object(data, MXT_GEN_COMMANDPROCESSOR_T6,
+		                        MXT_COMMAND_CALIBRATE, 1);
+
+	do {
+		error = mxt_read_message_reportid(data, &message, object->max_reportid);
+		if (error) {
+			tsp_debug_err(true, dev, "%s : Failed to retrieve CRC message[0x%x], error[%d]\n",
+									__func__, message.message[0], error);
+			return error;
+		}
+		tsp_debug_info(true, dev, "%s [%d]: message[0]=[0x%x]\n",
+									__func__, retry_cnt, message.message[0]);
+
+		if (message.message[0] & 0x10) {
+			break;
+		}
+	} while(retry_cnt--);
+
+	/* Check calibration is done */
+	if (message.message[0] & 0x10) {
+		object = mxt_get_object(data, MXT_SPT_SELFTEST_T25);
+
+		if (!object)
+			return -EIO;
+
+		/* Enable T25 Self test feature */
+		mxt_write_object(data, MXT_SPT_SELFTEST_T25, 0, 0x03);
+
+		/* Run the signal limit test */
+		mxt_write_object(data, MXT_SPT_SELFTEST_T25, 1, 0x17);
+
+		/* Read message from self test result, which only has one report ID */
+		error = mxt_read_message_reportid(data, &message, object->max_reportid);
+		if (error) {
+			tsp_debug_err(true, dev, "Failed to received t25 message\n");
+			return 1;
+		}
+
+		if(message.message[0] == 0x17) {
+            tsp_debug_info(true, dev, "%s : T25 signal limit failed & panel is off!\n",
+										__func__);
+			return 1;
+		} else if (message.message[0] == 0xFE) {
+			tsp_debug_info(true, dev, "%s : T25 all tests passed!\n", __func__);
+			return 0;
+		} else {
+			tsp_debug_err(true, dev, "%s : Abnormal T25 return value[0x%x]\n",
+										__func__, message.message[0]);
+			return 1;
+		}
+	}
+
+	tsp_debug_err(true, dev, "%s : Fail to check!\n", __func__);
+	return 1;
+}
 static int  mxt_fw_update_on_probe(struct mxt_data *data)
 {
 	struct device *dev = &data->client->dev;
@@ -2140,6 +2226,14 @@ static int  mxt_fw_update_on_probe(struct mxt_data *data)
 
 	memset(&fw_info, 0, sizeof(struct mxt_fw_info));
 	fw_info.data = data;
+
+	/* Panel condition check(COB Type).                                            */
+	/* Skip fw update when use Multi Panel by TSP ID pins & Panel is off. */
+	ret = check_signal_limit(data);
+	if (ret) {
+		tsp_debug_err(true, dev, "%s : TSP panel is off!\n", __func__);
+		goto ts_rest_init;
+	}
 
 	if (data->pdata->firmware_name == NULL) {
 		tsp_debug_err(true, dev, "%s : tsp fw name is null, not update tsp fw!\n", __func__);
@@ -2298,7 +2392,6 @@ struct mxt_touchkey mxt_touchkey_data[] = {
 static int mxt_power_ctrl(void *ddata, bool on)
 {
 	struct mxt_data *info = (struct mxt_data *)ddata;
-	int rc;
 	struct device *dev = &info->client->dev;
 
 	struct regulator *regulator_dvdd;
@@ -2312,13 +2405,11 @@ static int mxt_power_ctrl(void *ddata, bool on)
 	if (info->tsp_pwr_enabled == on)
 		return retval;
 
-	if (!info->pdata->always_on_dvdd) {
-		regulator_dvdd = regulator_get(NULL, info->pdata->regulator_dvdd);
-		if (IS_ERR(regulator_dvdd)) {
-			tsp_debug_err(true, dev, "%s: Failed to get %s regulator.\n",
-				 __func__, info->pdata->regulator_dvdd);
-			return PTR_ERR(regulator_dvdd);
-		}
+	regulator_dvdd = regulator_get(NULL, info->pdata->regulator_dvdd);
+	if (IS_ERR(regulator_dvdd)) {
+		tsp_debug_err(true, dev, "%s: Failed to get %s regulator.\n",
+			 __func__, info->pdata->regulator_dvdd);
+		return PTR_ERR(regulator_dvdd);
 	}
 
 	regulator_avdd = regulator_get(NULL, info->pdata->regulator_avdd);
@@ -2330,59 +2421,73 @@ static int mxt_power_ctrl(void *ddata, bool on)
 
 	if (on) {
 		pinctrl_state = pinctrl_lookup_state(info->pinctrl, "on_state");
-
-		if (!info->pdata->always_on_dvdd) {
-			retval = regulator_enable(regulator_dvdd);
+		if (IS_ERR(pinctrl_state)) {
+			tsp_debug_err(true, dev, "%s: Failed to lookup pinctrl.\n", __func__);
+		} else {
+			retval = pinctrl_select_state(info->pinctrl, pinctrl_state);
 			if (retval) {
-				tsp_debug_err(true, dev, "%s: Failed to enable vdd: %d\n", __func__, retval);
-				return retval;
+				tsp_debug_err(true, dev, "%s: Failed to configure pinctrl.\n", __func__);
+				goto fail_pwr_ctrl;
 			}
+		}
+
+		retval = regulator_enable(regulator_dvdd);
+		if (retval) {
+			tsp_debug_err(true, dev, "%s: Failed to enable vdd: %d\n", __func__, retval);
+			goto fail_pwr_ctrl;
 		}
 
 		retval = regulator_enable(regulator_avdd);
 		if (retval) {
 			tsp_debug_err(true, dev, "%s: Failed to enable avdd: %d\n", __func__, retval);
-			return retval;
+			goto fail_pwr_ctrl;
 		}
 
-	} else {
-		if (!info->pdata->always_on_dvdd) {
-			if (regulator_is_enabled(regulator_dvdd))
-				regulator_disable(regulator_dvdd);
+		usleep_range(1000,1200);
+
+		retval = gpio_direction_output(info->pdata->gpio_reset, 1);
+		if (retval) {
+			tsp_debug_err(true, dev, "%s: unable to set_direction for info->pdata->gpio_reset[%d]\n",
+						__func__,info->pdata->gpio_reset);
+			goto fail_pwr_ctrl;
 		}
-		if (regulator_is_enabled(regulator_avdd))
-			regulator_disable(regulator_avdd);
 
-		pinctrl_state = pinctrl_lookup_state(info->pinctrl, "off_state");
-	}
-
-	if (IS_ERR(pinctrl_state)) {
-		tsp_debug_err(true, dev, "%s: Failed to lookup pinctrl.\n", __func__);
-	} else {
-		retval = pinctrl_select_state(info->pinctrl, pinctrl_state);
-		if (retval)
-			tsp_debug_err(true, dev, "%s: Failed to configure pinctrl.\n", __func__);
-	}
-
-	info->tsp_pwr_enabled = on;
-	if (!info->pdata->always_on_dvdd) {
-		regulator_put(regulator_dvdd);
-	}
-	regulator_put(regulator_avdd);
-
-	msleep(1);
-
-	rc = gpio_direction_output(info->pdata->gpio_reset, on);
-	if (rc) {
-		tsp_debug_err(true, dev, "%s: unable to set_direction for info->pdata->gpio_reset[%d]\n",
-					__func__,info->pdata->gpio_reset);
-		return rc;
-	}
-
-	if(on)
 		msleep(MXT_HW_RESET_TIME);
 
-	return 0;
+	} else {
+		retval = gpio_direction_output(info->pdata->gpio_reset, 0);
+		if (retval) {
+			tsp_debug_err(true, dev, "%s: unable to set_direction for info->pdata->gpio_reset[%d]\n",
+						__func__,info->pdata->gpio_reset);
+			goto fail_pwr_ctrl;
+		}
+
+		pinctrl_state = pinctrl_lookup_state(info->pinctrl, "off_state");
+		if (IS_ERR(pinctrl_state)) {
+			tsp_debug_err(true, dev, "%s: Failed to lookup pinctrl.\n", __func__);
+		} else {
+			retval = pinctrl_select_state(info->pinctrl, pinctrl_state);
+			if (retval) {
+				tsp_debug_err(true, dev, "%s: Failed to configure pinctrl.\n", __func__);
+				goto fail_pwr_ctrl;
+			}
+		}
+
+		if (regulator_is_enabled(regulator_dvdd))
+			regulator_disable(regulator_dvdd);
+
+		if (regulator_is_enabled(regulator_avdd))
+			regulator_disable(regulator_avdd);
+	}
+
+fail_pwr_ctrl:
+	if(!retval)
+		info->tsp_pwr_enabled = on;
+
+	regulator_put(regulator_dvdd);
+	regulator_put(regulator_avdd);
+
+	return retval;
 }
 
 static int mxt_parse_dt(struct i2c_client *client, struct mxt_platform_data *pdata)
@@ -2392,6 +2497,8 @@ static int mxt_parse_dt(struct i2c_client *client, struct mxt_platform_data *pda
 	const char *model = NULL;
 	u32 coords[4];
 	int ret;
+	int fw_name_num = 0; /* default */
+	int gpio_tspid1 = 0, gpio_tspid2 = 0;
 
 	/* reset, irq gpio info */
 	pdata->gpio_irq= of_get_named_gpio(np, "mxts,irq-gpio", 0);
@@ -2437,12 +2544,34 @@ static int mxt_parse_dt(struct i2c_client *client, struct mxt_platform_data *pda
 	}
 	pdata->power_ctrl = mxt_power_ctrl;
 
-	pdata->always_on_dvdd = of_property_read_bool(np, "always_on_dvdd");
-	if (pdata->always_on_dvdd) {
-		tsp_debug_info(true, dev, "%s: DVDD 1.8V Always on!\n", __func__);
+
+	/* Check tsp id pin for supporting multi panel and seperation of fw-file*/
+	gpio_tspid1 = of_get_named_gpio(np, "mxts,tspid1-gpio", 0);
+	if (gpio_tspid1 < 0 ) {
+		tsp_debug_err(true, dev, "%s: unable to get tspid1 [%d]\n", __func__, gpio_tspid1);
+		gpio_tspid1 = -1;
 	}
 
-	of_property_read_string(np, "mxts,firmware_name", &pdata->firmware_name);
+	gpio_tspid2 = of_get_named_gpio(np, "mxts,tspid2-gpio", 0);
+	if (gpio_tspid2 < 0 ) {
+		tsp_debug_err(true, dev, "%s: unable to get tspid2 [%d]\n", __func__, gpio_tspid2);
+		gpio_tspid2 = -1;
+	}
+
+	fw_name_num = (gpio_tspid1 >= 0 ? gpio_get_value(gpio_tspid1) : 0) +
+				((gpio_tspid2 >= 0 ? gpio_get_value(gpio_tspid2) : 0) << 1);
+	if (fw_name_num == 0){
+		of_property_read_string(np, "mxts,firmware_name", &pdata->firmware_name);
+		of_property_read_string(np, "mxts,paneltype", &pdata->paneltype);
+	} else if (fw_name_num == 3){
+		of_property_read_string(np, "mxts,firmware_name3", &pdata->firmware_name);
+		of_property_read_string(np, "mxts,paneltype3", &pdata->paneltype);
+	}
+
+	tsp_debug_info(true, dev, "%s : fw_name[%d][%s][%s], tsp id pin : [%d:[%d],%d:[%d]]\n",
+			__func__, fw_name_num, pdata->paneltype, pdata->firmware_name,
+			gpio_tspid1, gpio_tspid1 >= 0 ? gpio_get_value(gpio_tspid1) : -1,
+			gpio_tspid2, gpio_tspid2 >= 0 ? gpio_get_value(gpio_tspid2) : -1);
 
 #if ENABLE_TOUCH_KEY
 	pdata->num_touchkey = ARRAY_SIZE(mxt_touchkey_data);
@@ -2450,9 +2579,9 @@ static int mxt_parse_dt(struct i2c_client *client, struct mxt_platform_data *pda
 #endif
 
 	tsp_debug_info(true, dev, "%s : tsp_int[%d], rst[%d], xnode[%d], ynode[%d],"
-							" max_x=[%d], max_y[%d], model_name[%s], fw_name[%s]\n",
+							" max_x=[%d], max_y[%d], model_name[%s]\n",
 			__func__, pdata->gpio_irq, pdata->gpio_reset, pdata->num_xnode, pdata->num_ynode,
-			pdata->max_x, pdata->max_y,	pdata->model_name, pdata->firmware_name);
+			pdata->max_x, pdata->max_y,	pdata->model_name);
 
 	return 0;
 }
@@ -2711,12 +2840,12 @@ static struct i2c_driver mxt_i2c_driver = {
 static int  mxt_i2c_init(void)
 {
 	printk(KERN_INFO "%s\n", __func__);
-#if 0	/* only for Bringup*/
+
 	if (lpcharge == 1) {
-		printk(KERN_ERR "%s : lpcharge mode!\n", __func__);
+		pr_err("%s : lpcharge mode!\n", __func__);
 		return -ENODEV;
 	}
-#endif
+
 	return i2c_add_driver(&mxt_i2c_driver);
 }
 

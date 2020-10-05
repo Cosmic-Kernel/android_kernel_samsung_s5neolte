@@ -53,6 +53,8 @@
 #define ADC_CH_COUNT		10
 #define ADC_SAMPLE_COUNT	10
 
+#define BATT_MISC_EVENT_UNDEFINED_RANGE_TYPE	0x00000001
+
 struct adc_sample_info {
 	unsigned int cnt;
 	int total_adc;
@@ -195,6 +197,7 @@ struct sec_battery_info {
 	int test_mode;
 	bool factory_mode;
 	bool store_mode;
+	bool ignore_store_mode;
 	bool slate_mode;
 
 	/* MTBF test for CMCC */
@@ -215,6 +218,10 @@ struct sec_battery_info {
 	int discharging_ntc_adc;
 	int self_discharging_adc;
 #endif
+#if defined(CONFIG_SW_SELF_DISCHARGING)
+	struct wake_lock self_discharging_wake_lock;
+	bool sw_self_discharging;
+#endif
 
 	bool charging_block;
 #if defined(CONFIG_BATTERY_SWELLING)
@@ -234,6 +241,11 @@ struct sec_battery_info {
 	bool complete_timetofull;
 	struct delayed_work timetofull_work;
 #endif
+	struct mutex misclock;
+	unsigned int misc_event;
+	unsigned int prev_misc_event;
+	struct delayed_work misc_event_work;
+	struct wake_lock misc_event_wake_lock;
 };
 
 ssize_t sec_bat_show_attrs(struct device *dev,
@@ -343,11 +355,22 @@ enum {
 	BATT_DISCHARGING_NTC_ADC,
 	BATT_SELF_DISCHARGING_CONTROL,
 #endif
+#if defined(CONFIG_SW_SELF_DISCHARGING)
+	BATT_SW_SELF_DISCHARGING,
+#endif
 #if defined(CONFIG_WIRELESS_CHARGER_INBATTERY)
 	BATT_INBAT_WIRELESS_CS100,
 #endif
 	HMT_TA_CONNECTED,
 	HMT_TA_CHARGE,
+#if defined(CONFIG_BATTERY_SMART)
+	FG_FIRMWARE,
+#endif
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+	FG_CYCLE,
+	FG_FULL_VOLTAGE,
+#endif
+	BATT_MISC_EVENT,
 };
 
 #ifdef CONFIG_OF

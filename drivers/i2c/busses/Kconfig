@@ -655,7 +655,7 @@ config I2C_S3C2410
 
 config FIX_I2C_BUS_NUM
 	bool "Fix I2C bus number"
-	depends on I2C_S3C2410
+	depends on I2C_S3C2410 || I2C_EXYNOS5
 	default n
 	help
 	   This will fix I2C bus number.

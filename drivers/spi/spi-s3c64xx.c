@@ -35,6 +35,7 @@
 
 #include <linux/platform_data/spi-s3c64xx.h>
 #include <mach/exynos-fimc-is.h>
+#include <linux/pinctrl/pinctrl-samsung.h>
 
 #if defined(CONFIG_S3C_DMA) || defined(CONFIG_SAMSUNG_DMADEV)
 #include <linux/dma/dma-pl330.h>
@@ -150,6 +151,7 @@ static LIST_HEAD(drvdata_list);
 #define RXBUSY    (1<<2)
 #define TXBUSY    (1<<3)
 
+#define GPIO_SPI_FUNC	(0x2)
 /**
  * struct s3c64xx_spi_info - SPI Controller hardware info
  * @fifo_lvl_mask: Bit-mask for {TX|RX}_FIFO_LVL bits in SPI_STATUS register.
@@ -196,6 +198,15 @@ static void flush_fifo(struct s3c64xx_spi_driver_data *sdd)
 	unsigned long loops;
 	u32 val;
 
+	if (sdd->cur_mode & SPI_CPOL) {
+		if ((sdd->spiclk_pindev_name != NULL) && (sdd->spiclk_pin_name != NULL)) {
+			pin_config_set(sdd->spiclk_pindev_name, sdd->spiclk_pin_name,
+					PINCFG_PACK(PINCFG_TYPE_DAT, 0x1));
+			pin_config_set(sdd->spiclk_pindev_name, sdd->spiclk_pin_name,
+					PINCFG_PACK(PINCFG_TYPE_FUNC, FUNC_OUTPUT));
+		}
+	}
+
 	writel(0, regs + S3C64XX_SPI_PACKET_CNT);
 
 	val = readl(regs + S3C64XX_SPI_CH_CFG);
@@ -232,6 +243,14 @@ static void flush_fifo(struct s3c64xx_spi_driver_data *sdd)
 	val = readl(regs + S3C64XX_SPI_CH_CFG);
 	val &= ~S3C64XX_SPI_CH_SW_RST;
 	writel(val, regs + S3C64XX_SPI_CH_CFG);
+
+	if (sdd->cur_mode & SPI_CPOL) {
+		if ((sdd->spiclk_pindev_name != NULL) && (sdd->spiclk_pin_name != NULL)) {
+			udelay(5);
+			pin_config_set(sdd->spiclk_pindev_name, sdd->spiclk_pin_name,
+					PINCFG_PACK(PINCFG_TYPE_FUNC, GPIO_SPI_FUNC));
+		}
+	}
 
 	val = readl(regs + S3C64XX_SPI_MODE_CFG);
 	val &= ~(S3C64XX_SPI_MODE_TXDMA_ON | S3C64XX_SPI_MODE_RXDMA_ON);
@@ -1180,6 +1199,15 @@ static int s3c64xx_spi_setup(struct spi_device *spi)
 		return -ENODEV;
 	}
 
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (sdd->port_id == CONFIG_SENSORS_FP_SPI_NUMBER)
+		return 0;
+#endif
+#ifdef CONFIG_ESE_SECURE
+	if (sdd->port_id == CONFIG_ESE_SECURE_SPI_PORT)
+		return 0;
+#endif
+
 	if (!spi_get_ctldata(spi)) {
 		if(cs->line != 0) {
 			err = gpio_request_one(cs->line, GPIOF_OUT_INIT_HIGH,
@@ -1334,6 +1362,15 @@ static void s3c64xx_spi_hwinit(struct s3c64xx_spi_driver_data *sdd, int channel)
 	struct s3c64xx_spi_info *sci = sdd->cntrlr_info;
 	void __iomem *regs = sdd->regs;
 	unsigned int val;
+
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	if (channel == CONFIG_SENSORS_FP_SPI_NUMBER)
+		return;
+#endif
+#ifdef CONFIG_ESE_SECURE
+	if (channel == CONFIG_ESE_SECURE_SPI_PORT)
+		return;
+#endif
 
 	sdd->cur_speed = 0;
 
@@ -1647,6 +1684,13 @@ static int s3c64xx_spi_probe(struct platform_device *pdev)
 		dev_err(&pdev->dev, "spi clkoff-time %d\n", sdd->spi_clkoff_time);
 	}
 
+	sdd->spiclk_pindev_name = NULL;
+	sdd->spiclk_pin_name = NULL;
+	of_property_read_string(pdev->dev.of_node, "spiclk-pindev-name",
+					(const char **)&sdd->spiclk_pindev_name);
+	of_property_read_string(pdev->dev.of_node, "spiclk-pin-name",
+					(const char **)&sdd->spiclk_pin_name);
+
 	/* Setup Deufult Mode */
 	s3c64xx_spi_hwinit(sdd, sdd->port_id);
 
@@ -1662,9 +1706,18 @@ static int s3c64xx_spi_probe(struct platform_device *pdev)
 		goto err3;
 	}
 
-	writel(S3C64XX_SPI_INT_RX_OVERRUN_EN | S3C64XX_SPI_INT_RX_UNDERRUN_EN |
-	       S3C64XX_SPI_INT_TX_OVERRUN_EN | S3C64XX_SPI_INT_TX_UNDERRUN_EN,
-	       sdd->regs + S3C64XX_SPI_INT_EN);
+	if (1
+#ifdef ENABLE_SENSORS_FPRINT_SECURE
+	&& (sdd->port_id != CONFIG_SENSORS_FP_SPI_NUMBER)
+#endif
+#ifdef CONFIG_ESE_SECURE
+	&& (sdd->port_id != CONFIG_ESE_SECURE_SPI_PORT)
+#endif
+	) {
+		writel(S3C64XX_SPI_INT_RX_OVERRUN_EN | S3C64XX_SPI_INT_RX_UNDERRUN_EN |
+			S3C64XX_SPI_INT_TX_OVERRUN_EN | S3C64XX_SPI_INT_TX_UNDERRUN_EN,
+			sdd->regs + S3C64XX_SPI_INT_EN);
+	}
 
 	pm_runtime_mark_last_busy(&pdev->dev);
 	pm_runtime_put_sync(&pdev->dev);

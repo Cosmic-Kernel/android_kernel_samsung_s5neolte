@@ -36,6 +36,8 @@
 #include "modem_utils.h"
 #include "link_device_memory.h"
 #include "link_ctrlmsg_iosm.h"
+#include <linux/modem_notifier.h>
+
 
 #ifdef GROUP_MEM_LINK_COMMAND
 
@@ -78,6 +80,7 @@ static int shmem_reset_ipc_link(struct mem_link_device *mld)
 	}
 
 	atomic_set(&ld->netif_stopped, 0);
+	ld->tx_flowctrl_mask = 0;
 
 	set_magic(mld, MEM_IPC_MAGIC);
 	set_access(mld, 1);
@@ -183,6 +186,9 @@ static void shmem_handle_cp_crash(struct mem_link_device *mld,
 	stop_net_ifaces(ld);
 	purge_txq(mld);
 
+	if (cp_online(mc))
+		modem_notify_event(state);
+
 	if (cp_online(mc) || cp_booting(mc))
 		set_modem_state(mld, state);
 
@@ -214,16 +220,19 @@ static void shmem_forced_cp_crash(struct mem_link_device *mld)
 	set_access(mld, 0);
 
 	if (atomic_inc_return(&mld->forced_cp_crash) > 1) {
-		evt_log(0, "%s: %s: ALREADY in progress <%pf>\n",
-			FUNC, ld->name, CALLER);
+		mif_err("%s: ALREADY in progress <%pf>\n",
+			ld->name, CALLER);
 		return;
 	}
 
 	if (!cp_online(mc) && !cp_booting(mc)) {
-		evt_log(0, "%s: %s: %s.state %s != ONLINE <%pf>\n",
-			FUNC, ld->name, mc->name, mc_state(mc), CALLER);
+		mif_err("%s: %s.state %s != ONLINE <%pf>\n",
+			ld->name, mc->name, mc_state(mc), CALLER);
 		return;
 	}
+
+	/* Disable debug Snapshot */
+	mif_set_snapshot(false);
 
 	if (mld->attrs & LINK_ATTR(LINK_ATTR_MEM_DUMP)) {
 		stop_net_ifaces(ld);
@@ -244,7 +253,7 @@ static void shmem_forced_cp_crash(struct mem_link_device *mld)
 		shmem_forced_cp_crash(mld);
 	}
 
-	evt_log(0, "%s->%s: CP_CRASH_REQ <%pf>\n", ld->name, mc->name, CALLER);
+	mif_err("%s->%s: CP_CRASH_REQ <%pf>\n", ld->name, mc->name, CALLER);
 }
 
 #endif
@@ -370,7 +379,7 @@ static void cmd_crash_reset_handler(struct mem_link_device *mld)
 	mld->state = LINK_STATE_OFFLINE;
 	spin_unlock_irqrestore(&mld->state_lock, flags);
 
-	evt_log(0, "%s<-%s: ERR! CP_CRASH_RESET\n", ld->name, mc->name);
+	mif_err("%s<-%s: ERR! CP_CRASH_RESET\n", ld->name, mc->name);
 
 	shmem_handle_cp_crash(mld, STATE_CRASH_RESET);
 }
@@ -381,6 +390,9 @@ static void cmd_crash_exit_handler(struct mem_link_device *mld)
 	struct modem_ctl *mc = ld->mc;
 	unsigned long flags;
 
+	/* Disable debug Snapshot */
+	mif_set_snapshot(false);
+
 	spin_lock_irqsave(&mld->state_lock, flags);
 	mld->state = LINK_STATE_CP_CRASH;
 	spin_unlock_irqrestore(&mld->state_lock, flags);
@@ -389,9 +401,9 @@ static void cmd_crash_exit_handler(struct mem_link_device *mld)
 		del_timer(&mld->crash_ack_timer);
 
 	if (atomic_read(&mld->forced_cp_crash))
-		evt_log(0, "%s<-%s: CP_CRASH_ACK\n", ld->name, mc->name);
+		mif_err("%s<-%s: CP_CRASH_ACK\n", ld->name, mc->name);
 	else
-		evt_log(0, "%s<-%s: ERR! CP_CRASH_EXIT\n", ld->name, mc->name);
+		mif_err("%s<-%s: ERR! CP_CRASH_EXIT\n", ld->name, mc->name);
 
 #ifdef DEBUG_MODEM_IF
 	if (!atomic_read(&mld->forced_cp_crash))
@@ -496,10 +508,6 @@ static int tx_frames_to_dev(struct mem_link_device *mld,
 
 	while (1) {
 		struct sk_buff *skb;
-#ifdef DEBUG_MODEM_IF_LINK_TX
-		u8 *hdr;
-		u8 ch;
-#endif
 
 		skb = skb_dequeue(skb_txq);
 		if (unlikely(!skb))
@@ -516,9 +524,7 @@ static int tx_frames_to_dev(struct mem_link_device *mld,
 		tx_bytes += ret;
 
 #ifdef DEBUG_MODEM_IF_LINK_TX
-		hdr = skbpriv(skb)->lnk_hdr ? skb->data : NULL;
-		ch = skbpriv(skb)->sipc_ch;
-		log_ipc_pkt(ch, LINK, TX, skb, hdr);
+		mif_pkt(skbpriv(skb)->sipc_ch, "LNK-TX", skb);
 #endif
 
 		dev_kfree_skb_any(skb);
@@ -680,7 +686,9 @@ static int tx_frames_to_rb(struct sbd_ring_buffer *rb)
 		}
 
 		tx_bytes += ret;
-		log_ipc_pkt(rb->ch, LINK, TX, skb, NULL);
+#ifdef DEBUG_MODEM_IF_LINK_TX
+		mif_pkt(rb->ch, "LNK-TX", skb);
+#endif
 		dev_kfree_skb_any(skb);
 	}
 
@@ -962,7 +970,7 @@ static int xmit_udl(struct mem_link_device *mld, struct io_device *iod,
 	}
 
 #ifdef DEBUG_MODEM_IF_LINK_TX
-	log_ipc_pkt(ch, LINK, TX, skb, skb->data);
+	mif_pkt(ch, "LNK-TX", skb);
 #endif
 
 	dev_kfree_skb_any(skb);
@@ -981,9 +989,6 @@ static void pass_skb_to_demux(struct mem_link_device *mld, struct sk_buff *skb)
 	struct io_device *iod = skbpriv(skb)->iod;
 	int ret;
 	u8 ch = skbpriv(skb)->sipc_ch;
-#ifdef DEBUG_MODEM_IF_LINK_RX
-	u8 *hdr;
-#endif
 
 	if (unlikely(!iod)) {
 		mif_err("%s: ERR! No IOD for CH.%d\n", ld->name, ch);
@@ -993,8 +998,7 @@ static void pass_skb_to_demux(struct mem_link_device *mld, struct sk_buff *skb)
 	}
 
 #ifdef DEBUG_MODEM_IF_LINK_RX
-	hdr = skbpriv(skb)->lnk_hdr ? skb->data : NULL;
-	log_ipc_pkt(ch, LINK, RX, skb, hdr);
+	mif_pkt(ch, "LNK-RX", skb);
 #endif
 
 	ret = iod->recv_skb_single(iod, ld, skb);
@@ -1103,8 +1107,8 @@ static struct sk_buff *rxq_read(struct mem_link_device *mld,
 	return skb;
 
 bad_msg:
-	evt_log(0, "%s: %s%s%s: ERR! BAD MSG: %02x %02x %02x %02x\n",
-		FUNC, ld->name, arrow(RX), ld->mc->name,
+	mif_err("%s%s%s: ERR! BAD MSG: %02x %02x %02x %02x\n",
+		ld->name, arrow(RX), ld->mc->name,
 		hdr[0], hdr[1], hdr[2], hdr[3]);
 	set_rxq_tail(dev, in);	/* Reset tail (out) pointer */
 	shmem_forced_cp_crash(mld);
@@ -1222,7 +1226,9 @@ static void pass_skb_to_net(struct mem_link_device *mld, struct sk_buff *skb)
 		return;
 	}
 
-	log_ipc_pkt(iod->id, LINK, RX, skb, NULL);
+#ifdef DEBUG_MODEM_IF_LINK_RX
+	mif_pkt(iod->id, "LNK-RX", skb);
+#endif
 
 	ret = iod->recv_net_skb(iod, ld, skb);
 	if (unlikely(ret < 0)) {
@@ -1544,7 +1550,8 @@ static int shmem_send(struct link_device *ld, struct io_device *iod,
 
 			mif_err("wait TX RESUME CMD...\n");
 			INIT_COMPLETION(ld->raw_tx_resumed);
-			wait_for_completion(&ld->raw_tx_resumed);
+			wait_for_completion_timeout(&ld->raw_tx_resumed,
+				msecs_to_jiffies(3000));
 			mif_err("TX resumed done.\n");
 		}
 
@@ -1702,9 +1709,12 @@ static int shmem_xmit_boot(struct link_device *ld, struct io_device *iod,
 
 	/**
 	 * Check the size of the boot image
+	 * fix the integer overflow of "mf.m_offset + mf.len" from Jose Duart
 	 */
-	if (mf.size > valid_space) {
-		mif_err("%s: ERR! Invalid binary size %d\n", ld->name, mf.size);
+	if (mf.size > valid_space || mf.len > valid_space
+			|| mf.m_offset > valid_space - mf.len) {
+		mif_err("%s: ERR! Invalid args: size %x, offset %x, len %x\n",
+			ld->name, mf.size, mf.m_offset, mf.len);
 		return -EINVAL;
 	}
 
@@ -2057,7 +2067,7 @@ static void shmem_qos_work(struct work_struct *work)
 		pm_qos_update_request(&pm_qos_req_mif,
 				mld->mif_clk_table[level - 1]);
 	} else {
-		mif_err("Unlock CPU(%u)\n", level);
+		mif_err("Unlock MIF(%u)\n", level);
 		pm_qos_update_request(&pm_qos_req_mif, 0);
 	}
 }
@@ -2161,6 +2171,22 @@ static int shmem_rx_setup(struct link_device *ld)
 	return 0;
 }
 
+#if defined(CONFIG_SOC_EXYNOS7580)
+#include <mach/map.h>
+static void check_chipid_with_shmem_size(size_t size)
+{
+	unsigned chipid = __raw_readl(S5P_VA_CHIPID2 + 0xC);
+	bool is_isla = ((chipid & 0x700) == 0x0100);
+	char *chipname = is_isla ? "Exynos7579" : "Exynos7580";
+
+	mif_info("chip-id: 0x%x (%s)\n", chipid, chipname);
+	if (size != (is_isla ? 0x5c00000 : 0x7800000))
+		mif_err("\nWARNNING: CP mem size mismatch, %s(0x%lx)\n\n",
+			chipname, (unsigned long)size);
+}
+#else
+#define check_chipid_with_shmem_size(size)
+#endif
 struct link_device *shmem_create_link_device(struct platform_device *pdev)
 {
 	struct modem_data *modem;
@@ -2337,6 +2363,7 @@ struct link_device *shmem_create_link_device(struct platform_device *pdev)
 	mif_err("boot_start=%lu, boot_size=%lu\n",
 		(unsigned long)mld->boot_start, (unsigned long)mld->boot_size);
 
+	check_chipid_with_shmem_size(mld->shm_size);
 	/**
 	 * Initialize SHMEM maps for IPC (physical map -> logical map)
 	 */

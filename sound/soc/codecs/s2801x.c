@@ -405,9 +405,8 @@ int s2801x_hw_params(struct snd_pcm_substream *substream,
 				S2801X_REG_07_IN3_CTL1,
 				(INCTL1_MPCM_SRATE_MASK << INCTL1_MPCM_SRATE_SHIFT),
 				(MPCM_SRATE_16KHZ << INCTL1_MPCM_SRATE_SHIFT));
-		} else {
-			dev_err(s2801x->dev,
-					"%s: Unsupported BT samplerate (%d)\n",
+		} else if (bt_sample_rate != S2801X_SAMPLE_RATE_48KHZ) {
+			dev_err(s2801x->dev, "%s: Unsupported BT samplerate (%d)\n",
 					__func__, bt_sample_rate);
 			return -EINVAL;
 		}
@@ -1763,7 +1762,7 @@ static int s2801x_runtime_resume(struct device *dev)
 	lpass_get_sync(dev);
 	s2801x_runtime_power_on(dev);
 	s2801x_clk_enable(dev);
-	s2801x_cfg_gpio(dev, "default");
+	s2801x_cfg_gpio(dev, "bt-idle");
 
 	regcache_cache_only(s2801x->regmap, false);
 	regcache_sync(s2801x->regmap);

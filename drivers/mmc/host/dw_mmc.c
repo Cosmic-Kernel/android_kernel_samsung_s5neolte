@@ -166,6 +166,7 @@ do {					\
 #define MAX_RETRY_CNT	2
 #define DRTO		200
 #define DRTO_MON_PERIOD	50
+#define DW_MCI_BUSY_WAIT_TIMEOUT	250
 
 static struct dma_attrs dw_mci_direct_attrs;
 
@@ -1063,6 +1064,9 @@ static void dw_mci_idmac_complete_dma(struct dw_mci *host)
 #define AES_CBC		1
 #define AES_XTS		2
 
+extern volatile unsigned int disk_key_flag;
+extern spinlock_t disk_key_lock;
+
 static void dw_mci_translate_sglist(struct dw_mci *host, struct mmc_data *data,
 				    unsigned int sg_len)
 {
@@ -1073,7 +1077,6 @@ static void dw_mci_translate_sglist(struct dw_mci *host, struct mmc_data *data,
 #if defined(CONFIG_MMC_DW_FMP_DM_CRYPT) || defined(CONFIG_MMC_DW_FMP_ECRYPT_FS)
 	unsigned int sector = 0;
 	unsigned int sector_key = DW_MMC_BYPASS_SECTOR_BEGIN;
-	static unsigned int fmp_key_flag = 0;
 #if defined(CONFIG_MMC_DW_FMP_DM_CRYPT)
 	struct mmc_blk_request *brq = NULL;
 	struct mmc_queue_req *mq_rq = NULL;
@@ -1161,8 +1164,10 @@ static void dw_mci_translate_sglist(struct dw_mci *host, struct mmc_data *data,
 					desc->des31 = htonl(sector);
 
 					/* Disk Enc Key, Tweak Key */
-					if (!fmp_key_flag) {
+					if (disk_key_flag) {
 						int ret;
+
+						/* Disk Enc Key, Tweak Key*/
 						ret = exynos_smc(SMC_CMD_FMP, FMP_KEY_SET, EMMC0_FMP, 0);
 						if (ret) {
 							dev_err(host->dev, "Failed to smc call for FMP key setting: %x\n", ret);
@@ -1172,7 +1177,9 @@ static void dw_mci_translate_sglist(struct dw_mci *host, struct mmc_data *data,
 							host->state_cmd = STATE_IDLE;
 							spin_unlock(&host->lock);
 						}
-						fmp_key_flag = 1;
+						spin_lock(&disk_key_lock);
+						disk_key_flag = 0;
+						spin_unlock(&disk_key_lock);
 					}
 
 				}
@@ -1608,7 +1615,7 @@ static void dw_mci_submit_data(struct dw_mci *host, struct mmc_data *data)
 static bool dw_mci_wait_data_busy(struct dw_mci *host, struct mmc_request *mrq)
 {
 	u32 status;
-	unsigned long timeout = jiffies + msecs_to_jiffies(500);
+	unsigned long timeout = jiffies + msecs_to_jiffies(DW_MCI_BUSY_WAIT_TIMEOUT);
 	struct dw_mci_slot *slot = host->cur_slot;
 	int try = 2;
 	u32 clkena;
@@ -1639,7 +1646,7 @@ static bool dw_mci_wait_data_busy(struct dw_mci *host, struct mmc_request *mrq)
 
 			dw_mci_update_clock(host->cur_slot);
 		}
-		timeout = jiffies + msecs_to_jiffies(500);
+		timeout = jiffies + msecs_to_jiffies(DW_MCI_BUSY_WAIT_TIMEOUT);
 	} while (--try);
 out:
 	if (host->cur_slot) {
@@ -3786,7 +3793,8 @@ static void dw_mci_work_routine_card(struct work_struct *work)
 }
 
 #if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE) || \
-    defined(CONFIG_BCM4343)  || defined(CONFIG_BCM4343_MODULE)
+    defined(CONFIG_BCM4343) || defined (CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined (CONFIG_BCM43454_MODULE)
 static void dw_mci_notify_change(void *dev, int state)
 {
 	struct dw_mci *host = (struct dw_mci *)dev;
@@ -4116,7 +4124,9 @@ static int dw_mci_init_slot(struct dw_mci *host, unsigned int id)
 	/* Card initially undetected */
 	slot->last_detect_state = 0;
 
-#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)
+#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)|| \
+    defined(CONFIG_BCM4343)  || defined(CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined(CONFIG_BCM43454_MODULE)
 	if (host->pdata->cd_type == DW_MCI_CD_EXTERNAL) {
 		printk("%s, set DW_MCI_CD_EXTERNAL \n",mmc_hostname(mmc));
 		host->pdata->ext_cd_init(&dw_mci_notify_change, (void*)host);
@@ -4275,7 +4285,9 @@ static struct dw_mci_of_quirks {
 	},
 };
 
-#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)
+#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)|| \
+    defined(CONFIG_BCM4343)  || defined(CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined(CONFIG_BCM43454_MODULE)
 void (*notify_func_callback)(void *dev_id, int state);
 void *mmc_host_dev = NULL;
 static DEFINE_MUTEX(notify_mutex_lock);
@@ -4487,10 +4499,14 @@ static struct dw_mci_board *dw_mci_parse_dt(struct dw_mci *host)
 				&pdata->cd_type))
 		pdata->cd_type = DW_MCI_CD_PERMANENT;
 
-	if (of_find_property(np, "cd-type-gpio", NULL))
+	if (of_find_property(np, "cd-type-gpio", NULL)) {
 		pdata->cd_type = DW_MCI_CD_GPIO;
+		pdata->caps2 |= MMC_CAP2_DETECT_ON_ERR;
+	}
 
-#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)
+#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)|| \
+    defined(CONFIG_BCM4343)  || defined(CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined(CONFIG_BCM43454_MODULE)
         if (of_find_property(np, "pm-ignore-notify", NULL))
                 pdata->pm_caps |= MMC_PM_IGNORE_PM_NOTIFY;
 
@@ -4877,7 +4893,9 @@ void dw_mci_remove(struct dw_mci *host)
 	mci_writel(host, RINTSTS, 0xFFFFFFFF);
 	mci_writel(host, INTMASK, 0); /* disable all mmc interrupt first */
 
-#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)
+#if defined(CONFIG_BCM43455) || defined(CONFIG_BCM43455_MODULE)|| \
+    defined(CONFIG_BCM4343)  || defined(CONFIG_BCM4343_MODULE) || \
+    defined(CONFIG_BCM43454) || defined(CONFIG_BCM43454_MODULE)
 	if (host->pdata->cd_type == DW_MCI_CD_EXTERNAL)
 		host->pdata->ext_cd_cleanup(&dw_mci_notify_change, (void *)host);
 #else
@@ -4980,8 +4998,6 @@ int dw_mci_suspend(struct dw_mci *host)
 		host->transferred_cnt = 0;
 		host->cmd_cnt = 0;
 	}
-	if (host->vmmc)
-		regulator_disable(host->vmmc);
 
 	if (host->pdata->enable_cclk_on_suspend) {
 		host->pdata->on_suspend = true;
@@ -5011,19 +5027,6 @@ int dw_mci_resume(struct dw_mci *host)
 		host->pdata->on_suspend = false;
 
 	host->current_speed = 0;
-
-	if (host->pdata->ext_setpower)
-		host->pdata->ext_setpower(host,
-			DW_MMC_EXT_VMMC_ON | DW_MMC_EXT_VQMMC_ON);
-
-	if (host->vmmc) {
-		ret = regulator_enable(host->vmmc);
-		if (ret) {
-			dev_err(host->dev,
-				"failed to enable regulator: %d\n", ret);
-			return ret;
-		}
-	}
 
 	if (host->pdata->use_biu_gate_clock)
 		atomic_inc_return(&host->biu_en_win);

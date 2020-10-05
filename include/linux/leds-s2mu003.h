@@ -38,6 +38,8 @@
 #define S2MU003_FLASH_TORCH_OFF 0x00
 #define S2MU003_BOOST_FLASH_MODE_MASK 0x04
 
+#define S2MU003_TORCH_BRIGHTNESS(mA) (((mA - 25) /25) & 0x0f)
+
 enum s2mu003_led_id {
 	S2MU003_OFF,
 	S2MU003_FLASH_LED = 0,
@@ -166,6 +168,7 @@ struct s2mu003_fled_platform_data {
 	struct s2mu003_led leds[S2MU003_LED_MAX];
 	int torch_pin;
 	int flash_pin;
+	bool lvp_enable;
 	struct pinctrl *fled_pinctrl;
 	struct pinctrl_state *gpio_state_active;
 	struct pinctrl_state *gpio_state_suspend;

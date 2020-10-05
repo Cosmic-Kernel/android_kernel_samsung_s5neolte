@@ -1008,10 +1008,8 @@ static struct sk_buff *ncm_wrap_ntb(struct gether *port,
 		dev_kfree_skb_any(skb);
 		return NULL;
 	}
+	skb2 = skb_realloc_headroom(skb, ncb_len);
 
-	skb2 = skb_copy_expand(skb, ncb_len,
-			       max_size - skb->len - ncb_len - crc_len,
-			       GFP_ATOMIC);
 	dev_kfree_skb_any(skb);
 #ifdef CONFIG_USB_NCM_SUPPORT_MTU_CHANGE
 	if (!skb2) {

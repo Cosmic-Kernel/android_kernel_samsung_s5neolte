@@ -486,7 +486,12 @@ static int alloc_requests(struct eth_dev *dev, struct gether *link, unsigned n)
 	status = prealloc(&dev->tx_reqs, link->in_ep, n);
 	if (status < 0)
 		goto fail;
-	status = prealloc(&dev->rx_reqs, link->out_ep, n);
+	
+	if (link->is_fixed)
+		status = prealloc(&dev->rx_reqs, link->out_ep, n/2);
+	else
+		status = prealloc(&dev->rx_reqs, link->out_ep, n);
+	
 	if (status < 0)
 		goto fail;
 	goto done;

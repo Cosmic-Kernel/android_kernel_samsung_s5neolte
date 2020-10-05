@@ -327,8 +327,11 @@ struct samsung_pll_rate_table table_disp[] = {
 	{273000000U,	4, 336, 3, 0},
 	{166000000U,	13, 332, 2, 0},
 	{142000000U,	13, 284, 2, 0},
-	{133000000U,	13, 266, 2, 0},
-	{63000000U, 	13, 126, 2, 0},
+  	{140250000U,	13, 561, 3, 0},
+	{136000000U,	13, 272, 2, 0},
+	{74250000U, 	13, 297, 3, 0},
+	{64500000U, 	13, 129, 2, 0},
+	{63000000U, 	13, 63, 1, 0},
 	{58000000U,	13, 116, 2, 0},
 	{0,		0, 0, 0, 0},
 };
@@ -1273,7 +1276,7 @@ static struct samsung_gate exynos7580_gate_clks[] __initdata = {
 	GATE(i2c1, "pclk_i2c1", "dout_aclk_peri_66", \
 			EXYNOS7580_EN_PCLK_PERIC, 8, 0, NULL),
 	GATE(i2c2, "pclk_i2c2", "dout_aclk_peri_66", \
-			EXYNOS7580_EN_PCLK_PERIC, 9, 0, NULL),
+			EXYNOS7580_EN_PCLK_PERIC, 9, 0, "i2c2_pclk"),
 	GATE(i2c3, "pclk_i2c3", "dout_aclk_peri_66", \
 			EXYNOS7580_EN_PCLK_PERIC, 10, CLK_IGNORE_UNUSED, NULL),
 	GATE(puart0, "pclk_uart0", "dout_aclk_peri_66", \
@@ -1287,9 +1290,9 @@ static struct samsung_gate exynos7580_gate_clks[] __initdata = {
 	GATE(pclk_spi0, "pclk_spi0", "dout_aclk_peri_66", \
 			EXYNOS7580_EN_PCLK_PERIC, 19, 0, NULL),
 	GATE(pclk_spi1, "pclk_spi1", "dout_aclk_peri_66", \
-			EXYNOS7580_EN_PCLK_PERIC, 20, 0, NULL),
+			EXYNOS7580_EN_PCLK_PERIC, 20, 0, "spi1-pclk"),
 	GATE(pclk_spi2, "pclk_spi2", "dout_aclk_peri_66", \
-			EXYNOS7580_EN_PCLK_PERIC, 21, 0, NULL),
+			EXYNOS7580_EN_PCLK_PERIC, 21, 0, "fp-spi-pclk"),
 	GATE(pclk_pwm, "pwm-clock", "dout_aclk_peri_66", \
 			EXYNOS7580_EN_PCLK_PERIC, 26, CLK_IGNORE_UNUSED | CLK_SET_RATE_PARENT, NULL),
 	GATE(none, "pclk_tmu0_apbif", "dout_aclk_peri_66", \
@@ -1309,9 +1312,9 @@ static struct samsung_gate exynos7580_gate_clks[] __initdata = {
 	GATE(sclk_spi0, "sclk_peri_spi0_ext_clk", "dout_sclk_peri_spi0_b", \
 			EXYNOS7580_EN_SCLK_TOP_PERI, 2, CLK_SET_RATE_PARENT, NULL),
 	GATE(sclk_spi1, "sclk_peri_spi1_ext_clk", "dout_sclk_peri_spi1_b", \
-			EXYNOS7580_EN_SCLK_TOP_PERI, 3, CLK_SET_RATE_PARENT, NULL),
+			EXYNOS7580_EN_SCLK_TOP_PERI, 3, CLK_SET_RATE_PARENT, "spi1-sclk"),
 	GATE(sclk_spi2, "sclk_peri_spi2_ext_clk", "dout_sclk_peri_spi2_b", \
-			EXYNOS7580_EN_SCLK_TOP_PERI, 4, CLK_SET_RATE_PARENT, NULL),
+			EXYNOS7580_EN_SCLK_TOP_PERI, 4, CLK_SET_RATE_PARENT, "fp-spi-sclk"),
 	GATE(suart0, "sclk_uart0", "sclk_peri_uart0_ext_uclk", \
 			EXYNOS7580_EN_SCLK_PERIC, 0, 0, "console-sclk0"),
 	GATE(suart1, "sclk_uart1", "sclk_peri_uart1_ext_uclk", \

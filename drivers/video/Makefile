@@ -182,5 +182,8 @@ ifeq ($(CONFIG_OF),y)
 obj-$(CONFIG_VIDEOMODE_HELPERS) += of_display_timing.o of_videomode.o
 endif
 
+# external hdmi
+obj-y += external_hdmi/
+
 # platform specific output drivers
 obj-$(CONFIG_VEXPRESS_DVI_CONTROL) += vexpress-dvi.o

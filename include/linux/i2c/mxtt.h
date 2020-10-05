@@ -511,6 +511,7 @@ struct mxt_platform_data {
 	unsigned int irqflags;
 	unsigned char revision;
 	const char *firmware_name;
+	const char *paneltype;
 	const char *project_name;
 	const char *model_name;
 	const u8 **config;
@@ -526,7 +527,6 @@ struct mxt_platform_data {
 	const char *regulator_led;
 #endif
 
-	bool always_on_dvdd;
 	const char *regulator_dvdd;
 	const char *regulator_avdd;
 	const char *regulator_xvdd;
@@ -555,7 +555,7 @@ struct mxt_info {
 
 struct mxt_message {
 	u8 reportid;
-	u8 message[9];
+	u8 message[10];
 };
 
 /**
@@ -669,6 +669,7 @@ struct mxt_data {
 	u16 mxt_err_cnt;
 	struct regulator *vcc_supply;
 	struct pinctrl *pinctrl;
+	char config_date[MXT_CONFIG_VERSION_LENGTH];
 
 	bool tsp_pwr_enabled;
 #ifdef CONFIG_HAS_EARLYSUSPEND

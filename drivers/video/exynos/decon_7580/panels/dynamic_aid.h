@@ -17,8 +17,14 @@ struct formular_t {
 	int denominator;
 };
 
+struct m_gray_limit_t {
+	int min;
+	int max;
+};
+
 struct dynamic_aid_param_t {
 	int				vreg;
+	int				vref_h;
 	const int		*iv_tbl;
 	int				iv_max;
 	int				*mtp;
@@ -28,11 +34,9 @@ struct dynamic_aid_param_t {
 
 	const int	*ibr_tbl;
 	int			ibr_max;
-	const int	*br_base;
-	const int	**gc_tbls; /* Gamma curve tables */
-	const int	*gc_lut; /* Gamma curve for generating the Lookup Table */
-	const int	(*offset_gra)[];
 	const struct rgb_t	(*offset_color)[];
+	int			*iv_ref;
+	const int	(*m_gray)[];
 };
 
 extern int dynamic_aid(struct dynamic_aid_param_t d_aid, int **gamma);

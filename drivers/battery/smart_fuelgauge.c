@@ -35,6 +35,7 @@ static enum power_supply_property smart_fuelgauge_props[] = {
 	POWER_SUPPLY_PROP_TIME_TO_FULL_NOW,
 	POWER_SUPPLY_PROP_CHG_CURRENT,
 	POWER_SUPPLY_PROP_MAX_VOLTAGE,
+	POWER_SUPPLY_PROP_PRESENT,
 };
 
 int smart_fg_read_reg(struct i2c_client *i2c, u8 reg, u8 *dest)
@@ -72,6 +73,19 @@ int smart_fg_read_word(struct i2c_client *i2c, u8 reg)
 		pr_info("%s reg(0x%x), ret(%d)\n", __func__, reg, ret);
 		return ret;
 	}
+
+	return ret;
+}
+
+int smart_fg_read_block_data(struct i2c_client *i2c, u8 reg, u8 length, u8 *value)
+{
+	struct smart_fuelgauge *fuelgauge = i2c_get_clientdata(i2c);
+	int ret;
+
+	mutex_lock(&fuelgauge->i2c_lock);
+	ret = i2c_smbus_read_i2c_block_data(i2c, reg, length, value);
+	if (ret < 0)
+		return ret;
 
 	return ret;
 }
@@ -153,6 +167,19 @@ static int smart_fg_read_remcap_alarm(struct smart_fuelgauge *fuelgauge)
 }
 #endif
 
+static u8 smart_fg_read_firmware(struct smart_fuelgauge *fuelgauge)
+{
+	u8 length;
+	u8 data[13];
+
+	length = 0xC;
+	smart_fg_read_block_data(fuelgauge->i2c, 0x78, length, data);
+
+	pr_info("%s : FIRMWARE(0x%02x)n", __func__, data[4]);
+
+	return data[4];
+}
+
 static int smart_fg_read_status(struct smart_fuelgauge *fuelgauge)
 {
 	int data;
@@ -190,41 +217,47 @@ static int smart_fg_read_designcap(struct smart_fuelgauge *fuelgauge)
 
 static int smart_fg_read_vcell(struct smart_fuelgauge *fuelgauge)
 {
-	int data;
+	int data = 0;
 	data = smart_fg_read_word(fuelgauge->i2c, SMARTFG_VOLT);
 	if (data < 0) {
 		pr_info("%s READ VCELL Failed!!!\n|", __func__);
-		data = 11000;
 	}
 	return data;
 }
 
 static int smart_fg_read_temp(struct smart_fuelgauge *fuelgauge)
 {
-	int data;
+	int data = 0;
 	int temp;
+	int i;
 
-	data = smart_fg_read_word(fuelgauge->i2c, SMARTFG_TEMP);
-	if (data < 0) {
-		pr_info("%s READ TEMP Failed!!!\n|", __func__);
-		data = 3000;
+	for (i = 0; i < 5; i++) {
+		data = smart_fg_read_word(fuelgauge->i2c, SMARTFG_TEMP);
+		if (data < 0) {
+			pr_info("%s READ TEMP Failed!!!\n|", __func__);
+			data = 3000;
+			break;
+		} else if (data <= 3731 ) {
+			break;
+		}
+		pr_info("%s : DATA(%d) ERROR!! I2C READ RETRY(%d)\n",
+			__func__, data, i);
 	}
-	temp = (data - 2731) / 10;
+
+	temp = data - 2731;
+	pr_info("%s : DATA(%d) TEMP(%d) I2C_READ_COUNT(%d)\n",
+		__func__, data, temp, i);
 
 	return temp;
 }
 
 static int smart_fg_read_soc(struct smart_fuelgauge *fuelgauge)
 {
-	int data;
+	int data = 0;
 	data = smart_fg_read_word(fuelgauge->i2c, SMARTFG_RELATIVE_SOC);
 	if (data < 0) {
 		pr_info("%s READ SOC Failed!!!\n|", __func__);
 		fuelgauge->initial_update_of_soc = true;
-		if (fuelgauge->capacity_old <= 0)
-			data = 90;
-		else
-			data = fuelgauge->capacity_old;
 	}
 
 	pr_info("%s : FG_SOC(%d)\n", __func__, data);
@@ -410,6 +443,30 @@ static int smart_fg_age_forecast(struct smart_fuelgauge *fuelgauge)
 	return temp;
 }
 
+static int smart_fg_check_capacity_max(struct smart_fuelgauge *fuelgauge, int capacity_max)
+{
+	int new_capacity_max = capacity_max;
+
+	if (new_capacity_max < (fuelgauge->pdata->capacity_max -
+				fuelgauge->pdata->capacity_max_margin)) {
+		new_capacity_max =
+			(fuelgauge->pdata->capacity_max -
+			fuelgauge->pdata->capacity_max_margin);
+
+		pr_info("%s: set capacity max(%d --> %d)\n",
+			__func__, capacity_max, new_capacity_max);
+	} else if (new_capacity_max > (fuelgauge->pdata->capacity_max +
+				       fuelgauge->pdata->capacity_max_margin)) {
+		new_capacity_max =
+			(fuelgauge->pdata->capacity_max +
+			 fuelgauge->pdata->capacity_max_margin);
+
+		pr_info("%s: set capacity max(%d --> %d)\n",
+			__func__, capacity_max, new_capacity_max);
+	}
+
+	return new_capacity_max;
+}
 
 static int smart_fg_get_property(struct power_supply *psy,
 			     enum power_supply_property psp,
@@ -432,11 +489,27 @@ static int smart_fg_get_property(struct power_supply *psy,
 		break;
 		/* Current */
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
-		val->intval = smart_fg_read_current(fuelgauge);
+		switch (val->intval) {
+		case SEC_BATTERY_CURRENT_UA:
+			val->intval = smart_fg_read_current(fuelgauge) * 1000;
+			break;
+		case SEC_BATTERY_CURRENT_MA:
+		default:
+			val->intval = smart_fg_read_current(fuelgauge);
+			break;
+		}
 		break;
 		/* Average Current */
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
-		val->intval = smart_fg_read_avg_current(fuelgauge);
+		switch (val->intval) {
+		case SEC_BATTERY_CURRENT_UA:
+			val->intval = smart_fg_read_avg_current(fuelgauge) * 1000;
+			break;
+		case SEC_BATTERY_CURRENT_MA:
+		default:
+			val->intval = smart_fg_read_avg_current(fuelgauge);
+			break;
+		}
 		break;
 		/* Full Capacity */
 	case POWER_SUPPLY_PROP_ENERGY_NOW:
@@ -484,7 +557,13 @@ static int smart_fg_get_property(struct power_supply *psy,
 		val->intval = smart_fg_read_temp(fuelgauge);
 		break;
 	case POWER_SUPPLY_PROP_ENERGY_FULL:
-		val->intval = 100;
+	{
+		int fullcap = smart_fg_read_fullcap(fuelgauge);
+		int designcap = smart_fg_read_designcap(fuelgauge);
+		val->intval = fullcap * 100 / designcap;
+		pr_info("%s : asoc(%d), fullcap(%d), designcap(%d)\n",
+			__func__, val->intval, fullcap, designcap);
+	}
 		break;
 	case POWER_SUPPLY_PROP_ENERGY_FULL_DESIGN:
 		val->intval = fuelgauge->capacity_max;
@@ -496,6 +575,9 @@ static int smart_fg_get_property(struct power_supply *psy,
 		break;
 	case POWER_SUPPLY_PROP_MAX_VOLTAGE:
 		val->intval = smart_fg_read_chg_voltage(fuelgauge);
+		break;
+	case POWER_SUPPLY_PROP_PRESENT:
+		val->intval = smart_fg_read_firmware(fuelgauge);
 		break;
 	default:
 		return -EINVAL;
@@ -546,12 +628,14 @@ static int smart_fg_set_property(struct power_supply *psy,
 		} else {
 			pr_info("%s: capacity_max changed, %d -> %d\n",
 				__func__, fuelgauge->capacity_max, val->intval);
-			fuelgauge->capacity_max = val->intval;
+			fuelgauge->capacity_max = smart_fg_check_capacity_max(fuelgauge, val->intval);
 		}
+		fuelgauge->initial_update_of_soc = true;
 		break;
 	case POWER_SUPPLY_PROP_CHG_CURRENT:
 		break;
 	case POWER_SUPPLY_PROP_MAX_VOLTAGE:
+	case POWER_SUPPLY_PROP_PRESENT:
 		break;
 	default:
 		return -EINVAL;

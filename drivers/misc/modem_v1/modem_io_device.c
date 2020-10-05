@@ -338,7 +338,7 @@ static int rx_multi_pdp(struct sk_buff *skb)
 	print_ipv4_packet(skb->data, RX);
 #endif
 #if defined(DEBUG_MODEM_IF_IODEV_RX) && defined(DEBUG_MODEM_IF_PS_DATA)
-	log_ipc_pkt(iod->id, IODEV, RX, skb, NULL);
+	mif_pkt(iod->id, "IOD-RX", skb);
 #endif
 
 	if (in_interrupt())
@@ -935,7 +935,7 @@ static ssize_t misc_write(struct file *filp, const char __user *data,
 		memcpy(&skbpriv(skb)->ts, &ts, sizeof(struct timespec));
 #endif
 #ifdef DEBUG_MODEM_IF_IODEV_TX
-		log_ipc_pkt(iod->id, IODEV, TX, skb, NULL);
+		mif_pkt(iod->id, "IOD-TX", skb);
 #endif
 
 		/* Build SIPC5 link header*/
@@ -1009,7 +1009,7 @@ static ssize_t misc_read(struct file *filp, char *buf, size_t count,
 	}
 
 #ifdef DEBUG_MODEM_IF_IODEV_RX
-	log_ipc_pkt(iod->id, IODEV, RX, skb, NULL);
+	mif_pkt(iod->id, "IOD-RX", skb);
 #endif
 	mif_debug("%s: data:%d copied:%d qlen:%d\n",
 		iod->name, skb->len, copied, rxq->qlen);
@@ -1165,7 +1165,7 @@ static int vnet_xmit(struct sk_buff *skb, struct net_device *ndev)
 	memcpy(&skbpriv(skb_new)->ts, &ts, sizeof(struct timespec));
 #endif
 #if defined(DEBUG_MODEM_IF_IODEV_TX) && defined(DEBUG_MODEM_IF_PS_DATA)
-	log_ipc_pkt(iod->id, IODEV, TX, skb_new, NULL);
+	mif_pkt(iod->id, "IOD-TX", skb_new);
 #endif
 
 	/* Build SIPC5 link header*/
@@ -1429,7 +1429,6 @@ int sipc5_init_io_device(struct io_device *iod)
 
 		iod->miscdev.minor = MISC_DYNAMIC_MINOR;
 		iod->miscdev.name = iod->name;
-		iod->miscdev.fops = &misc_io_fops;
 
 		ret = misc_register(&iod->miscdev);
 		if (ret)

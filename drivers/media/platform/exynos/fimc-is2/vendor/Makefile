@@ -11,7 +11,8 @@ obj-$(CONFIG_COMPANION_DCDC_USE) += fimc-is-pmic.o
 
 obj-$(CONFIG_COMPANION_C2_USE) += fimc-is-companion_c2.o
 
-obj-$(CONFIG_OIS_USE)	+= fimc-is-device-ois.o
+obj-$(CONFIG_OIS_USE)		+= fimc-is-device-ois-common.o
+obj-$(CONFIG_OIS_USE_BU24219)	+= fimc-is-device-ois-bu24219.o
 obj-$(CONFIG_AF_HOST_CONTROL)	+= fimc-is-device-af.o
 obj-$(CONFIG_CAMERA_EEPROM_SUPPORT_REAR)	+= fimc-is-device-eeprom.o
 obj-$(CONFIG_CAMERA_EEPROM_SUPPORT_FRONT)	+= fimc-is-device-eeprom.o

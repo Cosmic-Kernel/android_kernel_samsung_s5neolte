@@ -1166,11 +1166,32 @@
 
 	dsim_0: dsim@14800000 {
 		lcd_info = <&s6e3fa2>;
+		decon_board = <&decon_board_list>;
 		/* lcd reset, power */
-		gpios = <&gpd1 3 0x1>, <&gpd1 1 0x1>;
-		lcd_vdd = "LCD_3P0";
-		lcd_vdd_2 = "LCD_1P8";
+		/* gpios = <&gpd1 3 0x1>, <&gpd1 1 0x1>; */
+		/* lcd_vdd = "LCD_3P0"; */
+		/* lcd_vdd_2 = "LCD_1P8"; */
 		status = "okay";
+	};
+
+	decon_board_list: decon_board_list {
+		dsim_set_panel_power_enable {
+			type = "regulator,enable", "regulator,enable", "gpio,high", "delay,usleep";
+			gpios = <&gpd1 1 0x1>;
+			delay = <10000 11000>;
+			regulator = "LCD_3P0", "LCD_1P8";
+		};
+		dsim_set_panel_power_disable {
+			type = "gpio,low", "delay,usleep", "gpio,low", "delay,usleep", "regulator,disable", "delay,usleep", "regulator,disable";
+			gpios = <&gpd1 3 0x1>, <&gpd3 1 0x1>;
+			delay = <10000 11000>, <5000 6000>, <5000 6000>;
+			regulator = "LCD_1P8", "LCD_3P0";
+		};
+		dsim_reset_panel {
+			type = "gpio,high", "delay,usleep", "gpio,low", "delay,usleep", "gpio,high", "delay,usleep";
+			gpios = <&gpd1 3 0x1>, <&gpd1 3 0x1>, <&gpd1 3 0x1>;
+			delay = <10000 11000>, <10000 11000>, <10000 11000>;
+		};
 	};
 
 	s6e3fa2: s6e3fa2_fhd {
@@ -1285,6 +1306,7 @@
 		samsung,auxdev = <&s2801x>;
 		gpios = <&gpf1 5 0x1>;
 		submic-bias-gpio = <&gpd2 3 0x1>;
+		samsung,codec-uses-i2scdclk;
 		clocks = <&clock 151>;		 /* sclk_i2s */
 		clock-names = "codec_bclk";
 		pinctrl-names = "default";
@@ -1332,7 +1354,7 @@
 	};
 
 	bluetooth {
-		compatible = "broadcom,bcm43455";
+		compatible = "broadcom,bcm43xx";
 		gpios = <&gpc4 2 0x1	/*BT_EN*/
 				&gpa2 2 0x1	/*BT_WAKE*/
 				&gpa2 6 0xF	/*BT_HOST_WAKE*/ >;

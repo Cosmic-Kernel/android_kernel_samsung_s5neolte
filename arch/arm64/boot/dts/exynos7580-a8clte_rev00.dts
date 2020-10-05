@@ -15,6 +15,7 @@
 #include "modem-carmen2-pdata.dtsi"
 #include "exynos7580-a8clte_battery.dtsi"
 #include "exynos7580-a8clte_gpio_00.dtsi"
+#include "exynos7580-a8clte_fingerprint-sensor_00.dtsi"
 
 / {
 	model = "Samsung a8c revision 00 board based on EXYNOS7580";
@@ -22,7 +23,7 @@
 	model_info-platform = "android";
 	model_info-subtype = "samsung";
 	model_info-hw_rev = <0>;
-	model_info-hw_rev_end = <255>;
+	model_info-hw_rev_end = <0>;
 	compatible = "samsung,exynos7580-universal7580,r00", "samsung,exynos7580";
 
 	chosen {
@@ -85,13 +86,6 @@
 			reg = <0>;
 			bus-width = <8>;
 		};
-	};
-
-	i2c@13860000 {
-	samsung,i2c-sda-delay = <100>;
-	samsung,i2c-max-bus-freq = <400000>;
-	samsung,i2c-bus-num = <20>;
-	status = "okay";
 	};
 
 	dwmmc1@13550000 {
@@ -168,7 +162,7 @@
 		gpio-controller;
 		sec-sd-slot-type = <1>; /* Normal SD slot */
 		#gpio-cells = <2>;
-		cd-gpio = <&gpa3 4 0xf>;
+		cd-gpio = <&gpa3 1 0xf>;
 		slot@0 {
 			reg = <0>;
 			bus-width = <4>;
@@ -275,9 +269,21 @@
 		};
 		/* T_FLASH_DET */
 		dwmmc2_cd_ext_irq: dwmmc2_cd_ext_irq {
-			samsung,pins = "gpa3-4";
+			samsung,pins = "gpa3-1";
 			samsung,pin-function = <0xf>;
 			samsung,pin-pud = <3>;
+			samsung,pin-drv = <0>;
+		};
+		earjack_jack_det: jack-det {
+			samsung,pins = "gpa3-1";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <0>;
+			samsung,pin-drv = <0>;
+		};
+		earjack_key_det: key-det {
+			samsung,pins = "gpa2-4";
+			samsung,pin-function = <0xf>;
+			samsung,pin-pud = <0>;
 			samsung,pin-drv = <0>;
 		};
 	};
@@ -411,14 +417,13 @@
 	};
 
 	/* Touchkey */
-	i2c@20 {
-		compatible = "i2c-gpio";
-		gpios = <&gpc5 2 0
-				&gpc5 3 0>;
-		i2c-gpio,delay-us = <5>;
+	i2c@13840000 {
+		samsung,i2c-sda-delay = <100>;
+		samsung,i2c-max-bus-freq = <200000>;
+		status = "okay";
 		#address-cells = <1>;
 		#size-cells = <0>;
-		status = "okay";
+		pinctrl-0 = <&i2c7_bus>;
 
 		touchkey@20 {
 			pinctrl-names = "on_irq","off_irq";
@@ -509,6 +514,21 @@
 		#address-cells = <1>;
 		#size-cells = <0>;
 		status = "okay";
+	};
+
+	pinctrl@139C0000 {
+		fled_flash_sleep: fled-flash-sleep {
+			samsung,pins = "gpe0-2", "gpe0-1";
+			samsung,pin-function = <2>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <0>;
+		};
+		fled_flash_active: fled-flash-active {
+			samsung,pins = "gpe0-2", "gpe0-1";
+			samsung,pin-function = <1>;
+			samsung,pin-pud = <1>;
+			samsung,pin-drv = <0>;
+		};
 	};
 
 	hsi2c@13880000 {
@@ -858,8 +878,8 @@
 		compatible = "samsung,exynos5-fimc-is-sensor-3p3";
 
 		pinctrl-names = "pin0", "pin1";
-		pinctrl-0 = <&fimc_is_mclk0_fn &fimc_is_i2c0 &fimc_is_flash>; /* rear on */
-		pinctrl-1 = <&fimc_is_mclk0_in &fimc_is_i2c0 &fimc_is_flash>; /* rear off */
+		pinctrl-0 = <&fimc_is_mclk0_fn &fimc_is_i2c0>; /* rear on */
+		pinctrl-1 = <&fimc_is_mclk0_in &fimc_is_i2c0>; /* rear off */
 
 		position = <0>; /* Rear:0. Front:1 */
 		id = <0>; /* bns_id */
@@ -868,10 +888,11 @@
 		sensor_i2c_addr = <0x0>;
 
 		gpio_reset = <&gpe0 4 0x1>; /* sensor reset */
+		gpios_cam_en = <&gpd0 6 0x1>;
 		status = "okay";
 
 		af {
-			product_name = <8>; /* AK7345 */
+			product_name = <13>; /* DW9807 */
 			i2c_addr = <0x18>;
 			i2c_ch = <0>; /* I2C 0 */
 		};
@@ -883,8 +904,8 @@
 		};
 	};
 
-	fimc_is_sensor_ov5670: fimc-is_sensor_ov5670@0 {
-		compatible = "samsung,exynos5-fimc-is-sensor-ov5670";
+	fimc_is_sensor_5e3: fimc-is_sensor_5e3@0 {
+		compatible = "samsung,exynos5-fimc-is-sensor-5e3";
 
 		pinctrl-names = "pin0", "pin1";
 		pinctrl-0 = <&fimc_is_mclk1_fn &fimc_is_i2c1>; /* front on */
@@ -897,7 +918,6 @@
 		sensor_i2c_addr = <0x0>;
 
 		gpio_reset = <&gpe0 3 0x1>;
-		gpio_standby = <&gpe0 0 0x1>;
 		status = "okay";
 	};
 
@@ -928,7 +948,7 @@
 
 	fimc_is@14400000 {
 		rear_sensor_id = <23>; /* SENSOR_NAME_S5K3P3 */
-		front_sensor_id = <204>; /* SENSOR_NAME_OV5670 */
+		front_sensor_id = <17>; /* SENSOR_NAME_S5K5E3 */
 		use_module_check;
 
 		total_camera_num = <2>;
@@ -961,10 +981,11 @@
 		#define DVFS_INT_L7 100000
 
 		#define DVFS_CAM_L0 530000
-		#define DVFS_CAM_L1 480000
-		#define DVFS_CAM_L2 430000
-		#define DVFS_CAM_L3 400000
-		#define DVFS_CAM_L4 200000
+		#define DVFS_CAM_L1 430000
+		#define DVFS_CAM_L2 400000
+		#define DVFS_CAM_L3 334000
+		#define DVFS_CAM_L4 267000
+		#define DVFS_CAM_L5 200000
 
 		#define DVFS_MIF_L0 825000
 		#define DVFS_MIF_L1 728000
@@ -981,19 +1002,19 @@
 			default_mif = <DVFS_MIF_L0>;
 			default_i2c = <0>;
 
-			front_preview_int = <DVFS_INT_L0>;
-			front_preview_cam = <DVFS_CAM_L0>;
-			front_preview_mif = <DVFS_MIF_L0>;
+			front_preview_int = <DVFS_INT_L3>;
+			front_preview_cam = <DVFS_CAM_L4>;
+			front_preview_mif = <DVFS_MIF_L3>;
 			front_preview_i2c = <0>;
 
-			front_capture_int = <DVFS_INT_L0>;
-			front_capture_cam = <DVFS_CAM_L0>;
-			front_capture_mif = <DVFS_MIF_L0>;
+			front_capture_int = <DVFS_INT_L3>;
+			front_capture_cam = <DVFS_CAM_L4>;
+			front_capture_mif = <DVFS_MIF_L3>;
 			front_capture_i2c = <0>;
 
-			front_video_int = <DVFS_INT_L0>;
-			front_video_cam = <DVFS_CAM_L0>;
-			front_video_mif = <DVFS_MIF_L0>;
+			front_video_int = <DVFS_INT_L3>;
+			front_video_cam = <DVFS_CAM_L4>;
+			front_video_mif = <DVFS_MIF_L3>;
 			front_video_i2c = <0>;
 
 			front_video_whd_int = <DVFS_INT_L0>;
@@ -1001,9 +1022,9 @@
 			front_video_whd_mif = <DVFS_MIF_L0>;
 			front_video_whd_i2c = <0>;
 
-			front_video_capture_int = <DVFS_INT_L0>;
-			front_video_capture_cam = <DVFS_CAM_L0>;
-			front_video_capture_mif = <DVFS_MIF_L0>;
+			front_video_capture_int = <DVFS_INT_L3>;
+			front_video_capture_cam = <DVFS_CAM_L4>;
+			front_video_capture_mif = <DVFS_MIF_L3>;
 			front_video_capture_i2c = <0>;
 
 			front_video_whd_capture_int = <DVFS_INT_L0>;
@@ -1011,19 +1032,19 @@
 			front_video_whd_capture_mif = <DVFS_MIF_L0>;
 			front_video_whd_capture_i2c = <0>;
 
-			front_vt1_int = <DVFS_INT_L0>;
-			front_vt1_cam = <DVFS_CAM_L0>;
-			front_vt1_mif = <DVFS_MIF_L0>;
+			front_vt1_int = <DVFS_INT_L3>;
+			front_vt1_cam = <DVFS_CAM_L4>;
+			front_vt1_mif = <DVFS_MIF_L3>;
 			front_vt1_i2c = <0>;
 
-			front_vt2_int = <DVFS_INT_L0>;
-			front_vt2_cam = <DVFS_CAM_L0>;
-			front_vt2_mif = <DVFS_MIF_L0>;
+			front_vt2_int = <DVFS_INT_L3>;
+			front_vt2_cam = <DVFS_CAM_L4>;
+			front_vt2_mif = <DVFS_MIF_L3>;
 			front_vt2_i2c = <0>;
 
-			rear_preview_fhd_int = <DVFS_INT_L0>;
+			rear_preview_fhd_int = <DVFS_INT_L3>;
 			rear_preview_fhd_cam = <DVFS_CAM_L0>;
-			rear_preview_fhd_mif = <DVFS_MIF_L0>;
+			rear_preview_fhd_mif = <DVFS_MIF_L2>;
 			rear_preview_fhd_i2c = <0>;
 
 			rear_preview_whd_int = <DVFS_INT_L0>;
@@ -1036,14 +1057,14 @@
 			rear_preview_uhd_mif = <DVFS_MIF_L0>;
 			rear_preview_uhd_i2c = <0>;
 
-			rear_capture_int = <DVFS_INT_L0>;
+			rear_capture_int = <DVFS_INT_L3>;
 			rear_capture_cam = <DVFS_CAM_L0>;
-			rear_capture_mif = <DVFS_MIF_L0>;
+			rear_capture_mif = <DVFS_MIF_L2>;
 			rear_capture_i2c = <0>;
 
-			rear_video_fhd_int = <DVFS_INT_L0>;
+			rear_video_fhd_int = <DVFS_INT_L3>;
 			rear_video_fhd_cam = <DVFS_CAM_L0>;
-			rear_video_fhd_mif = <DVFS_MIF_L0>;
+			rear_video_fhd_mif = <DVFS_MIF_L2>;
 			rear_video_fhd_i2c = <0>;
 
 			rear_video_uhd_int = <DVFS_INT_L0>;
@@ -1051,9 +1072,9 @@
 			rear_video_uhd_mif = <DVFS_MIF_L0>;
 			rear_video_uhd_i2c = <0>;
 
-			rear_video_fhd_capture_int = <DVFS_INT_L0>;
+			rear_video_fhd_capture_int = <DVFS_INT_L3>;
 			rear_video_fhd_capture_cam = <DVFS_CAM_L0>;
-			rear_video_fhd_capture_mif = <DVFS_MIF_L0>;
+			rear_video_fhd_capture_mif = <DVFS_MIF_L2>;
 			rear_video_fhd_capture_i2c = <0>;
 
 			rear_video_uhd_capture_int = <DVFS_INT_L0>;
@@ -1181,11 +1202,32 @@
 
 	dsim_0: dsim@14800000 {
 		lcd_info = <&s6e3fa3>;
+		decon_board = <&decon_board_list>;
 		/* lcd reset, power */
-		gpios = <&gpd1 3 0x1>, <&gpd3 1 0x1>;
-		lcd_vdd = "LCD_3P0";
-		lcd_vdd_2 = "LCD_1P8";
+		/* gpios = <&gpd1 3 0x1>, <&gpd3 1 0x1>; */
+		/* lcd_vdd = "LCD_3P0"; */
+		/* lcd_vdd_2 = "LCD_1P8"; */
 		status = "okay";
+	};
+
+	decon_board_list: decon_board_list {
+		dsim_set_panel_power_enable {
+			type = "regulator,enable", "regulator,enable", "gpio,high", "delay,usleep";
+			gpios = <&gpd3 1 0x1>;
+			delay = <10000 11000>;
+			regulator = "LCD_3P0", "LCD_1P8";
+		};
+		dsim_set_panel_power_disable {
+			type = "gpio,low", "delay,usleep", "gpio,low", "delay,usleep", "regulator,disable", "delay,usleep", "regulator,disable";
+			gpios = <&gpd1 3 0x1>, <&gpd3 1 0x1>;
+			delay = <10000 11000>, <5000 6000>, <5000 6000>;
+			regulator = "LCD_1P8", "LCD_3P0";
+		};
+		dsim_reset_panel {
+			type = "gpio,high", "delay,usleep", "gpio,low", "delay,usleep", "gpio,high", "delay,usleep";
+			gpios = <&gpd1 3 0x1>, <&gpd1 3 0x1>, <&gpd1 3 0x1>;
+			delay = <10000 11000>, <10000 11000>, <10000 11000>;
+		};
 	};
 
 	s6e3fa3: s6e3fa3_fhd {
@@ -1224,27 +1266,79 @@
 		status = "okay";
 	};
 
+	det_zones: det_zones {
+		#list-det-cells = <4>;
+	};
+
+	but_zones: but_zones {
+		#list-but-cells = <3>;
+	};
+
+	earjack {
+		compatible = "sec_jack";
+		detect-gpio = <&gpa3 1 0>;
+		key-gpio = <&gpa2 4 0>;
+	/*	key-dbtime = <100>; */
+	/*	det-dbtime = <50>; */
+		det-zones-list = <&det_zones 0 10000 10 0>,
+			<&det_zones 1700 10000 10 2>,
+			<&det_zones 3800 10000 10 1>,
+			<&det_zones 9999 10000 10 1>;
+		but-zones-list = <&but_zones 226 1 700>,
+			<&but_zones 582 701 768>,
+			<&but_zones 115 769 930>,
+			<&but_zones 114 931 1700>;
+		pinctrl-names = "default";
+		pinctrl-0 = <&earjack_jack_det &earjack_key_det>;
+		status = "okay";
+	};
+
 	sound {
 		compatible = "samsung,universal7580-cod3022x";
 		samsung,audio-cpu = <&i2s0	/* primary */
 					&i2s0	/* secondary */
 					&audio_cp_dummy
 					&audio_bt_dummy
-					&audio_fm_dummy>;
+					&audio_fm_dummy
+					&eax
+					&eax>;
 		samsung,audio-codec = <&audio_codec_cod3022x
 					&audio_codec_cod3022x
 					&audio_codec_cod3022x
 					&audio_codec_dummy
+					&audio_codec_cod3022x
+					&audio_codec_cod3022x
 					&audio_codec_cod3022x>;
 		samsung,auxdev = <&s2801x>;
-		gpios = <&gpf1 5 0x1>;
+		samsung,use-externel-jd;
 		clocks = <&clock 151>;		 /* sclk_i2s */
 		clock-names = "codec_bclk";
 		mic-bias-mode = <3 1 2>;
 		mic-bias-gpios = <&gpd2 7 0x1>;
 		pinctrl-names = "default";
 		pinctrl-0 = <&main_mic_bias_en>;
+		io-channels = <&exynos_adc 2>;
+		io-channel-names = "adc-jack";
+		#io-channel-cells = <1>;
+		io-channel-ranges;
+		samsung,fm-uses-bt1;
 		status = "okay";
+	};
+
+	/* NXP amp */
+	i2c@34 {
+		compatible = "i2c-gpio";
+		gpios = <&gpc1 4 0	/* sda */
+			&gpc1 3 0>;	/* scl */
+		i2c-gpio,delay-us = <5>;
+		#address-cells = <1>;
+		#size-cells = <0>;
+		i2c-gpio,bus-num = <20>;
+		status = "okay";
+		nxp_amp_tfa9897@34 {
+			compatible = "nxp,tfa9897";
+			reg = <0x34>;
+		};
 	};
 
 	usb_notifier {
@@ -1270,7 +1364,7 @@
 	};
 
 	bluetooth {
-		compatible = "broadcom,bcm43455";
+		compatible = "broadcom,bcm43xx";
 		gpios = <&gpc4 2 0x1	/*BT_EN*/
 				&gpa2 2 0x1	/*BT_WAKE*/
 				&gpa2 6 0xF	/*BT_HOST_WAKE*/ >;

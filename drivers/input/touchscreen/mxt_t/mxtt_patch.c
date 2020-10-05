@@ -1356,7 +1356,6 @@ static int mxt_patch_test_trigger(struct mxt_data *data,
 	return 0;
 }
 
-#if 0 //Event Test
 static int mxt_patch_test_event(struct mxt_data *data,
 	u8 event_id)
 {
@@ -1374,7 +1373,6 @@ static int mxt_patch_test_event(struct mxt_data *data,
 	}
 	return 0;
 }
-#endif
 
 static void mxt_patch_T6_object(struct mxt_data *data,
 		struct mxt_message *message)
@@ -1382,10 +1380,8 @@ static void mxt_patch_T6_object(struct mxt_data *data,
 	/* Normal mode */
 	if (message->message[0] == 0x00) {
 		//__mxt_patch_debug(data, "PATCH: NORMAL\n");
-#if 0 //Event Test
 		if(data->patch.event_cnt)
 			mxt_patch_test_event(data, 0);
-#endif
 	}
 	/* Calibration */
 	if (message->message[0] & 0x10){

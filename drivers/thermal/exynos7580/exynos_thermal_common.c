@@ -288,6 +288,7 @@ static int exynos_get_temp(struct thermal_zone_device *thermal,
 
 	mutex_lock(&thermal_suspend_lock);
 
+#ifndef CONFIG_EXYNOS7580_QUAD
 	if ((th_zone->sensor_conf->d_type == CPU) &&
 	    (th_zone->sensor_conf->id == 1)) {
 		max_temp = max(cpu_max_temp[0], cpu_max_temp[1]);
@@ -295,6 +296,14 @@ static int exynos_get_temp(struct thermal_zone_device *thermal,
 	} else  if (th_zone->sensor_conf->d_type == GPU) {
 		gpufreq_set_cur_temp(suspended, *temp / 1000);
 	}
+#else
+	if ((th_zone->sensor_conf->d_type == CPU)) {
+		max_temp = cpu_max_temp[0];
+		cpufreq_set_cur_temp(suspended, max_temp / 1000);
+	} else  if (th_zone->sensor_conf->d_type == GPU) {
+		gpufreq_set_cur_temp(suspended, *temp / 1000);
+	}
+#endif
 
 	mutex_unlock(&thermal_suspend_lock);
 

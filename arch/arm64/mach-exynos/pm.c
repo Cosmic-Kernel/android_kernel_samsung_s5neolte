@@ -103,6 +103,7 @@ static int exynos_pm_suspend(void)
 	volatile unsigned int cp_stat;
 
 	cp_stat = __raw_readl(CP_STAT);
+	exynos_ss_printk("CP_STAT : %x", cp_stat);
 	if (!cp_stat)
 		return -EINVAL;
 #endif

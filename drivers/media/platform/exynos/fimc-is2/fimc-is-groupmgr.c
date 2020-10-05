@@ -46,6 +46,9 @@
 #include "fimc-is-hw.h"
 #include "fimc-is-api-fd.h"
 
+#if defined(CONFIG_LEDS_SM5705)
+#include <linux/leds/leds-sm5705.h>
+#endif
 /* sysfs variable for debug */
 extern struct fimc_is_sysfs_debug sysfs_debug;
 
@@ -611,11 +614,13 @@ static void fimc_is_group_set_torch(struct fimc_is_group *group,
 #elif defined(CONFIG_LEDS_SKY81296)
 			sky81296_torch_ctrl(1);
 #elif defined(CONFIG_FLED_SM5703)
-			sm5703_led_mode_ctrl(1);
+			sm5703_led_mode_ctrl(5);
 			if (flash_control_ready == false) {
 				sm5703_led_mode_ctrl(3);
 				flash_control_ready = true;
 			}
+#elif defined(CONFIG_LEDS_SM5705)
+			sm5705_fled_torch_on(SM5705_FLED_0);
 #endif
 			break;
 		case AA_FLASHMODE_START: /*Pre flash mode*/
@@ -629,11 +634,15 @@ static void fimc_is_group_set_torch(struct fimc_is_group *group,
 				sm5703_led_mode_ctrl(3);
 				flash_control_ready = true;
 			}
+#elif defined(CONFIG_LEDS_SM5705)
+			sm5705_fled_torch_on(SM5705_FLED_0);
 #endif
 			break;
 		case AA_FLASHMODE_CAPTURE: /*Main flash mode*/
 #if defined(CONFIG_FLED_SM5703)
 			sm5703_led_mode_ctrl(2);
+#elif defined(CONFIG_LEDS_SM5705)
+			sm5705_fled_flash_on(SM5705_FLED_0);
 #endif
 			break;
 		case AA_FLASHMODE_OFF: /*OFF mode*/
@@ -641,6 +650,8 @@ static void fimc_is_group_set_torch(struct fimc_is_group *group,
 			sky81296_torch_ctrl(0);
 #elif defined(CONFIG_FLED_SM5703)
 			sm5703_led_mode_ctrl(0);
+#elif defined(CONFIG_LEDS_SM5705)
+			sm5705_fled_led_off(SM5705_FLED_0);
 #endif
 			break;
 		default:

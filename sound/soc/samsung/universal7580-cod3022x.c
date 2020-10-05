@@ -118,6 +118,7 @@ enum {
 struct universal7580_mic_bias {
 	int mode[3];
 	int gpio[3];
+	atomic_t use_count[3];
 };
 
 enum {
@@ -140,6 +141,7 @@ struct cod3022x_machine_priv {
 	bool use_external_jd;
 	struct universal7580_mic_bias mic_bias;
 	bool use_bt1_for_fm;
+	bool use_i2scdclk_for_codec_bclk;
 	bool use_ext_spk;
 	struct universal7580_ext_spk_bias ext_spk_bias;
 #ifdef CONFIG_PM_DEVFREQ
@@ -150,6 +152,81 @@ struct cod3022x_machine_priv {
 static const struct snd_soc_component_driver universal7580_cmpnt = {
 	.name = "universal7580-audio",
 };
+
+/**
+ * In some variants of the boards, the MCLK for the codec chip is connected to
+ * I2SCDCLK line. This clock needs to configured inside I2S block for the codec
+ * to work properly. If the AP playback has not happened before the CP or FM
+ * interface usage, this clock remains unconfigured and thus results in
+ * mal-fucntion of codec chip. This function is made generic so that it can be
+ * called from AP/CP/FM interfaces to enable MCLK.
+ */
+static int universal7580_configure_cpu_dai(struct snd_soc_card *card,
+					struct snd_soc_dai *cpu_dai,
+					int rfs, int bfs, int interface)
+{
+	int ret;
+
+	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S
+						| SND_SOC_DAIFMT_NB_NF
+						| SND_SOC_DAIFMT_CBS_CFS);
+	if (ret < 0) {
+		dev_err(card->dev, "aif%d: Failed to set CPU DAIFMT\n",
+							interface);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_CDCLK,
+				rfs, SND_SOC_CLOCK_OUT);
+	if (ret < 0) {
+		dev_err(card->dev, "aif%d: Failed to set SAMSUNG_I2S_CDCLK\n",
+						interface);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_OPCLK,
+						0, MOD_OPCLK_PCLK);
+	if (ret < 0) {
+		dev_err(card->dev, "aif%d: Failed to set SAMSUNG_I2S_OPCLK\n",
+								interface);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_RCLKSRC_1, 0, 0);
+	if (ret < 0) {
+		dev_err(card->dev,
+				"aif%d: Failed to set SAMSUNG_I2S_RCLKSRC_1\n",
+							interface);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_clkdiv(cpu_dai, SAMSUNG_I2S_DIV_BCLK, bfs);
+	if (ret < 0) {
+		dev_err(card->dev, "aif%d: Failed to set BFS\n", interface);
+		return ret;
+	}
+
+	ret = snd_soc_dai_set_clkdiv(cpu_dai, SAMSUNG_I2S_DIV_RCLK, rfs);
+	if (ret < 0) {
+		dev_err(card->dev, "aif%d: Failed to set RFS\n", interface);
+		return ret;
+	}
+
+	if (interface != 1) {
+		/* Provide sample-rate to I2S block to configure PSR value.
+		 * It also updates the BFS/RFS values in I2S h/w.
+		 */
+		ret = snd_soc_dai_set_clkdiv(cpu_dai, SAMSUNG_I2S_DIV_UPDATE,
+				COD3022X_SAMPLE_RATE_48KHZ);
+		if (ret < 0) {
+			dev_err(card->dev, "aif%d: Failed to update dividers\n",
+					interface);
+			return ret;
+		}
+	}
+
+	return 0;
+}
 
 static int universal7580_aif1_hw_params(struct snd_pcm_substream *substream,
 				 struct snd_pcm_hw_params *params)
@@ -167,7 +244,7 @@ static int universal7580_aif1_hw_params(struct snd_pcm_substream *substream,
 		 params_buffer_bytes(params));
 
 	priv->aifrate = params_rate(params);
-	if(priv->aifrate == COD3022X_SAMPLE_RATE_192KHZ) {
+	if (priv->aifrate == COD3022X_SAMPLE_RATE_192KHZ) {
 		rfs = COD3022X_RFS_192KHZ;
 		bfs = COD3022X_BFS_192KHZ;
 	} else {
@@ -183,46 +260,9 @@ static int universal7580_aif1_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
-	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S
-						| SND_SOC_DAIFMT_NB_NF
-						| SND_SOC_DAIFMT_CBS_CFS);
+	ret = universal7580_configure_cpu_dai(card, cpu_dai, rfs, bfs, 1);
 	if (ret < 0) {
-		dev_err(card->dev, "aif1: Failed to set CPU DAIFMT\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_CDCLK,
-				rfs, SND_SOC_CLOCK_OUT);
-	if (ret < 0) {
-		dev_err(card->dev, "aif1: Failed to set SAMSUNG_I2S_CDCLK\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_OPCLK,
-						0, MOD_OPCLK_PCLK);
-	if (ret < 0) {
-		dev_err(card->dev, "aif1: Failed to set SAMSUNG_I2S_OPCLK\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_RCLKSRC_1, 0, 0);
-	if (ret < 0) {
-		dev_err(card->dev,
-				"aif1: Failed to set SAMSUNG_I2S_RCLKSRC_1\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_clkdiv(cpu_dai,
-			SAMSUNG_I2S_DIV_BCLK, bfs);
-	if (ret < 0) {
-		dev_err(card->dev, "aif1: Failed to set BFS\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_clkdiv(cpu_dai,
-			SAMSUNG_I2S_DIV_RCLK, rfs);
-	if (ret < 0) {
-		dev_err(card->dev, "aif1: Failed to set RFS\n");
+		dev_err(card->dev, "aif1: Failed to configure cpu dai\n");
 		return ret;
 	}
 
@@ -271,57 +311,13 @@ static int universal7580_aif2_hw_params(struct snd_pcm_substream *substream,
 		return ret;
 	}
 
-	ret = snd_soc_dai_set_fmt(cpu_dai, SND_SOC_DAIFMT_I2S
-						| SND_SOC_DAIFMT_NB_NF
-						| SND_SOC_DAIFMT_CBS_CFS);
-	if (ret < 0) {
-		dev_err(card->dev, "aif2: Failed to set CPU DAIFMT\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_CDCLK,
-				COD3022X_RFS_48KHZ, SND_SOC_CLOCK_OUT);
-	if (ret < 0) {
-		dev_err(card->dev, "aif2: Failed to set SAMSUNG_I2S_CDCLK\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_OPCLK,
-						0, MOD_OPCLK_PCLK);
-	if (ret < 0) {
-		dev_err(card->dev, "aif2: Failed to set SAMSUNG_I2S_OPCLK\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_sysclk(cpu_dai, SAMSUNG_I2S_RCLKSRC_1, 0, 0);
-	if (ret < 0) {
-		dev_err(card->dev,
-				"aif2: Failed to set SAMSUNG_I2S_RCLKSRC_1\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_clkdiv(cpu_dai,
-			SAMSUNG_I2S_DIV_BCLK, COD3022X_BFS_48KHZ);
-	if (ret < 0) {
-		dev_err(card->dev, "aif2: Failed to set BFS\n");
-		return ret;
-	}
-
-	ret = snd_soc_dai_set_clkdiv(cpu_dai,
-			SAMSUNG_I2S_DIV_RCLK, COD3022X_RFS_48KHZ);
-	if (ret < 0) {
-		dev_err(card->dev, "aif2: Failed to set RFS\n");
-		return ret;
-	}
-
-	/* provde sampling rate to update the  PSR value and
-	 * it also updates BFS and RFS values to the I2S register
-	 */
-	ret = snd_soc_dai_set_clkdiv(cpu_dai,
-			SAMSUNG_I2S_DIV_UPDATE, COD3022X_SAMPLE_RATE_48KHZ);
-	if (ret < 0) {
-		dev_err(card->dev, "aif2: Failed to update dividers\n");
-		return ret;
+	if (priv->use_i2scdclk_for_codec_bclk) {
+		ret = universal7580_configure_cpu_dai(card, cpu_dai,
+			COD3022X_RFS_48KHZ, COD3022X_BFS_48KHZ, 2);
+		if (ret < 0) {
+			dev_err(card->dev, "aif2: Failed to configure cpu dai\n");
+			return ret;
+		}
 	}
 
 	ret = s2801x_hw_params(substream, params, bfs, 2);
@@ -367,6 +363,53 @@ static int universal7580_aif3_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
+static int universal7580_aif4_hw_params(struct snd_pcm_substream *substream,
+						 struct snd_pcm_hw_params *params)
+{
+	struct snd_soc_pcm_runtime *rtd = substream->private_data;
+	struct snd_soc_card *card = rtd->card;
+	struct cod3022x_machine_priv *priv = snd_soc_card_get_drvdata(card);
+	struct snd_soc_dai *cpu_dai = priv->cpu_dai;
+	int bfs, ret;
+
+	dev_info(card->dev, "aif4: %dch, %dHz, %dbytes\n",
+		 params_channels(params), params_rate(params),
+		 params_buffer_bytes(params));
+
+	switch (params_format(params)) {
+	case SNDRV_PCM_FORMAT_U24:
+	case SNDRV_PCM_FORMAT_S24:
+		bfs = 48;
+		break;
+	case SNDRV_PCM_FORMAT_U16_LE:
+	case SNDRV_PCM_FORMAT_S16_LE:
+		bfs = 32;
+		break;
+	default:
+		dev_err(card->dev, "aif4: Unsupported PCM_FORMAT\n");
+		return -EINVAL;
+	}
+
+	if (priv->use_i2scdclk_for_codec_bclk) {
+		/* I2s registers need to be configured , to provide the clk to codec*/
+		ret = universal7580_configure_cpu_dai(card, cpu_dai,
+				COD3022X_RFS_48KHZ, COD3022X_BFS_48KHZ, 4);
+		if (ret < 0) {
+			dev_err(card->dev, "aif4: Failed to configure cpu dai\n");
+			return ret;
+		}
+	}
+
+	/*Mixer interfcaes should be set as 3 - since FM uses BT interface */
+	ret = s2801x_hw_params(substream, params, bfs, 3);
+	if (ret < 0) {
+		dev_err(card->dev, "aif4: Failed to configure mixer\n");
+		return ret;
+	}
+
+	return 0;
+}
+
 static int universal7580_aif1_startup(struct snd_pcm_substream *substream)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -395,7 +438,8 @@ static int universal7580_aif2_startup(struct snd_pcm_substream *substream)
 	dev_dbg(card->dev, "aif2: (%s) %s called\n",
 			substream->stream ? "C" : "P", __func__);
 
-	pm_runtime_get_sync(priv->i2s_dev);
+	if (priv->use_i2scdclk_for_codec_bclk)
+		pm_runtime_get_sync(priv->i2s_dev);
 
 	s2801x_startup(S2801X_IF_CP);
 
@@ -424,6 +468,9 @@ static int universal7580_aif4_startup(struct snd_pcm_substream *substream)
 
 	dev_dbg(card->dev, "aif4: (%s) %s called\n",
 			substream->stream ? "C" : "P", __func__);
+
+	if (priv->use_i2scdclk_for_codec_bclk)
+		pm_runtime_get_sync(priv->i2s_dev);
 
 	s2801x_startup(S2801X_IF_BT);
 
@@ -463,7 +510,8 @@ void universal7580_aif2_shutdown(struct snd_pcm_substream *substream)
 
 	s2801x_shutdown(S2801X_IF_CP);
 
-	pm_runtime_put_sync(priv->i2s_dev);
+	if (priv->use_i2scdclk_for_codec_bclk)
+		pm_runtime_put_sync(priv->i2s_dev);
 }
 
 void universal7580_aif3_shutdown(struct snd_pcm_substream *substream)
@@ -494,6 +542,9 @@ void universal7580_aif4_shutdown(struct snd_pcm_substream *substream)
 		val &= ~EXYNOS7580_BT1_MASK;
 		writel(val, EXYNOS_PMU_AUD_PATH_CFG);
 	}
+
+	if (priv->use_i2scdclk_for_codec_bclk)
+		pm_runtime_put_sync(priv->i2s_dev);
 }
 
 static int universal7580_set_bias_level(struct snd_soc_card *card,
@@ -560,7 +611,6 @@ static int universal7580_int_bias2_ev(struct snd_soc_card *card,
 	struct cod3022x_machine_priv *priv = snd_soc_card_get_drvdata(card);
 
 	dev_dbg(card->dev, "%s called\n", __func__);
-
 	return cod3022x_mic_bias_ev(priv->codec, COD3022X_MIC2, event);
 }
 
@@ -568,6 +618,39 @@ static int universal7580_configure_mic_bias(struct snd_soc_card *card,
 		int index, int event)
 {
 	struct cod3022x_machine_priv *priv = snd_soc_card_get_drvdata(card);
+	int process_event = 0;
+	int mode_index = priv->mic_bias.mode[index];
+
+	/* validate the bias mode */
+	if ((mode_index < MB_INT_BIAS1) || (mode_index > MB_EXT_GPIO))
+		return 0;
+
+	/* decrement the bias mode index to match use count buffer
+	 * because use count buffer size is 0-2, and the mode is 1-3
+	 * so decrement, and this veriable should be used only for indexing
+	 * use_count.
+	 */
+	mode_index--;
+
+	switch (event) {
+	case SND_SOC_DAPM_PRE_PMU:
+		atomic_inc(&priv->mic_bias.use_count[mode_index]);
+		if (atomic_read(&priv->mic_bias.use_count[mode_index]) == 1)
+			process_event = 1;
+		break;
+
+	case SND_SOC_DAPM_POST_PMD:
+		atomic_dec(&priv->mic_bias.use_count[mode_index]);
+		if (atomic_read(&priv->mic_bias.use_count[mode_index]) == 0)
+			process_event = 1;
+		break;
+
+	default:
+		break;
+	}
+
+	if (!process_event)
+		return 0;
 
 	switch(priv->mic_bias.mode[index]) {
 	case MB_INT_BIAS1:
@@ -663,6 +746,11 @@ static void universal7580_parse_dt(struct snd_soc_card *card)
 		priv->use_bt1_for_fm = true;
 	else
 		priv->use_bt1_for_fm = false;
+
+	if (of_find_property(dev->of_node, "samsung,codec-uses-i2scdclk", NULL))
+		priv->use_i2scdclk_for_codec_bclk = true;
+	else
+		priv->use_i2scdclk_for_codec_bclk = false;
 
 	if (of_find_property(dev->of_node, "samsung,uses-ext-spk", NULL))
 		priv->use_ext_spk = true;
@@ -877,6 +965,7 @@ static struct snd_soc_ops universal7580_aif3_ops = {
 };
 
 static struct snd_soc_ops universal7580_aif4_ops = {
+	.hw_params = universal7580_aif4_hw_params,
 	.startup = universal7580_aif4_startup,
 	.shutdown = universal7580_aif4_shutdown,
 };
@@ -1057,6 +1146,7 @@ static void universal7580_mic_bias_parse_dt(struct platform_device *pdev, struct
 	for (i = 0; i < 3; i++) {
 		priv->mic_bias.mode[i] = MB_NONE;
 		priv->mic_bias.gpio[i] = -EINVAL;
+		atomic_set(&priv->mic_bias.use_count[i], 0);
 	}
 
 	ret = of_property_read_u32_array(np, "mic-bias-mode",
@@ -1155,7 +1245,6 @@ static int universal7580_audio_probe(struct platform_device *pdev)
 		s2801x_aux_dev[n].of_node = auxdev_np;
 		s2801x_codec_conf[n].of_node = auxdev_np;
 	}
-
 
 	snd_soc_card_set_drvdata(card, priv);
 

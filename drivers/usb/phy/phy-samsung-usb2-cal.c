@@ -251,10 +251,9 @@ void samsung_exynos_cal_dwc_usb2phy_tune(int cpu_type, void __iomem *regs_base,
 			phyparam0 |= PHYPARAM0_TXVREFTUNE(0xE);
 			phyparam0 &= ~PHYPARAM0_TXPREEMPAMPTUNE_MASK;
 			phyparam0 |= PHYPARAM0_TXPREEMPAMPTUNE(0x2);
-#if defined(CONFIG_USB_PHY_S5NEO)
 			phyparam0 &= ~PHYPARAM0_SQRXTUNE_MASK;
-			phyparam0 |= PHYPARAM0_SQRXTUNE(0x7);
-#endif
+			phyparam0 |= PHYPARAM0_SQRXTUNE(0x6);
+
 			writel(phyparam0, regs_base + SAMSUNG_PHYPARAM0);
 			printk(KERN_DEBUG "usb: set PHYPARAM0 for device mode = 0x%x\n", phyparam0);
 			break;

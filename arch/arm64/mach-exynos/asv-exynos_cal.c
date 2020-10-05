@@ -127,9 +127,11 @@ static struct abb_common exynos_abb_common_cl1 = {
 	.set_target_abb = exynos_set_abb,
 };
 
+#ifndef CONFIG_EXYNOS7580_QUAD
 static struct abb_common exynos_abb_common_cl0 = {
 	.set_target_abb = exynos_set_abb,
 };
+#endif
 
 static __maybe_unused struct abb_common exynos_abb_common_int = {
 	.set_target_abb = exynos_set_abb,
@@ -360,6 +362,7 @@ struct asv_info exynos_asv_member[] = {
 		.abb_info	= &exynos_abb_common_cl1,
 		.asv_group_nr	= MAX_ASV_GRP_NR,
 	}, {
+#ifndef CONFIG_EXYNOS7580_QUAD
 		.asv_type	= ID_CL1,
 		.name		= "VDD_CL1",
 		.ops		= &exynos_asv_ops,
@@ -367,6 +370,7 @@ struct asv_info exynos_asv_member[] = {
 		.abb_info	= &exynos_abb_common_cl0,
 		.asv_group_nr	= MAX_ASV_GRP_NR,
 	}, {
+#endif
 		.asv_type	= ID_INT,
 		.name		= "VDD_INT",
 		.ops		= &exynos_asv_ops,

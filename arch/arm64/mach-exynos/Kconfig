@@ -100,6 +100,10 @@ config SKIP_HW_BREAKPOINT
 config CAL_SYS_PWRDOWN
 	bool "Enable CAL for system level power down"
 
+config EXYNOS7580_QUAD
+	bool "Exynos7580 Quad core"
+	default n
+
 config EXYNOS_ATAGS
 	def_bool "ATAGS based boot for EXYNOS (deprecated)"
 	depends on !ARCH_MULTIPLATFORM

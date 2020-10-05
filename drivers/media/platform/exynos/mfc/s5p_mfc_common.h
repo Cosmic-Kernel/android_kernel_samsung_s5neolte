@@ -37,6 +37,8 @@
 #include <linux/pm_qos.h>
 #endif
 
+#define MFC_DRIVER_INFO		151007
+
 #define MFC_MAX_BUFFERS		32
 #define MFC_MAX_REF_BUFS	2
 #define MFC_FRAME_PLANES	2
@@ -129,7 +131,7 @@ enum s5p_mfc_inst_state {
 	MFCINST_INIT = 100,
 	MFCINST_GOT_INST,
 	MFCINST_HEAD_PARSED,
-	MFCINST_BUFS_SET,
+	MFCINST_RUNNING_BUF_FULL,
 	MFCINST_RUNNING,
 	MFCINST_FINISHING,
 	MFCINST_FINISHED,
@@ -451,11 +453,12 @@ struct s5p_mfc_h264_enc_params {
 	u16 ext_sar_height;
 	u8 open_gop;
 	u16 open_gop_size;
-	u8 hier_qp;
+	u8 hier_qp_enable;
 	enum v4l2_mpeg_video_h264_hierarchical_coding_type hier_qp_type;
-	u8 hier_qp_layer;
-	u8 hier_qp_layer_qp[7];
-	u32 hier_qp_layer_bit[7];
+	u8 num_hier_layer;
+	u8 hier_ref_type;
+	u8 hier_qp_layer[7];
+	u32 hier_bit_layer[7];
 	u8 sei_gen_enable;
 	u8 sei_fp_curr_frame_0;
 	enum v4l2_mpeg_video_h264_sei_fp_arrangement_type sei_fp_arrangement_type;
@@ -469,6 +472,10 @@ struct s5p_mfc_h264_enc_params {
 	u32 aso_slice_order[8];
 
 	u32 prepend_sps_pps_to_idr;
+	u32 enable_ltr;
+	u32 set_priority;
+	u32 base_priority;
+	u32 vui_enable;
 };
 
 /**
@@ -505,13 +512,13 @@ struct s5p_mfc_vp8_enc_params {
 	u8 vp8_filterlevel;
 	u8 vp8_filtersharpness;
 	u8 vp8_goldenframesel;
-	u8 vp8_gfrefreshperiod;
-	u8 hierarchy_qp_enable;
-	u8 hier_qp_layer_qp[3];
-	u32 hier_qp_layer_bit[3];
+	u16 vp8_gfrefreshperiod;
+	u8 hier_qp_enable;
+	u8 hier_qp_layer[3];
+	u32 hier_bit_layer[3];
 	u8 num_refs_for_p;
 	u8 intra_4x4mode_disable;
-	u8 num_temporal_layer;
+	u8 num_hier_layer;
 };
 
 /**
@@ -534,25 +541,23 @@ struct s5p_mfc_hevc_enc_params {
 	u8 max_partition_depth;
 	u8 num_refs_for_p;
 	u8 refreshtype;
-	u8 refreshperiod;
-	s8 croma_qp_offset_cr;
-	s8 croma_qp_offset_cb;
-	s8 lf_beta_offset_div2;
-	s8 lf_tc_offset_div2;
+	u16 refreshperiod;
+	s32 lf_beta_offset_div2;
+	s32 lf_tc_offset_div2;
 	u8 loopfilter_disable;
-	u8 loopfilter_across;
 	u8 nal_control_length_filed;
 	u8 nal_control_user_ref;
 	u8 nal_control_store_ref;
 	u8 const_intra_period_enable;
 	u8 lossless_cu_enable;
 	u8 wavefront_enable;
-	u8 longterm_ref_enable;
-	u8 hier_qp;
+	u8 enable_ltr;
+	u8 hier_qp_enable;
 	u8 hier_qp_type;
-	u8 hier_qp_layer;
-	u8 hier_qp_layer_qp;
-	u8 hier_qp_layer_bit;
+	u8 num_hier_layer;
+	u8 hier_qp_layer[7];
+	u32 hier_bit_layer[7];
+	u8 hier_ref_type;
 	u8 sign_data_hiding;
 	u8 general_pb_enable;
 	u8 temporal_id_enable;
@@ -576,9 +581,10 @@ struct s5p_mfc_enc_params {
 
 	u32 gop_size;
 	enum v4l2_mpeg_video_multi_slice_mode slice_mode;
-	u16 slice_mb;
+	u32 slice_mb;
 	u32 slice_bit;
-	u16 intra_refresh_mb;
+	u32 slice_mb_row;
+	u32 intra_refresh_mb;
 	u8 pad;
 	u8 pad_luma;
 	u8 pad_cb;
@@ -586,6 +592,8 @@ struct s5p_mfc_enc_params {
 	u8 rc_frame;
 	u32 rc_bitrate;
 	u16 rc_reaction_coeff;
+	u32 config_qp;
+	u32 dynamic_qp;
 	u8 frame_tag;
 
 	u8 num_b_frame;		/* H.264/MPEG4 */
@@ -657,6 +665,7 @@ struct s5p_mfc_buf_ctrl {
 	int has_new;
 	int val;
 	unsigned int old_val;		/* only for MFC_CTRL_TYPE_SET */
+	unsigned int old_val2;		/* only for MFC_CTRL_TYPE_SET */
 	unsigned int is_volatile;	/* only for MFC_CTRL_TYPE_SET */
 	unsigned int updated;
 	unsigned int mode;
@@ -836,6 +845,7 @@ struct s5p_mfc_enc {
 		unsigned int bits;
 	} slice_size;
 	unsigned int in_slice;
+	unsigned int buf_full;
 
 	int stored_tag;
 	struct mfc_user_shared_handle sh_handle;
@@ -876,6 +886,14 @@ struct s5p_mfc_ctx {
 	int buf_height;
 	int dpb_count;
 	int buf_stride;
+
+	int old_img_width;
+	int old_img_height;
+
+	unsigned int enc_drc_flag;
+	int enc_res_change;
+	int enc_res_change_state;
+	int enc_res_change_re_input;
 
 	struct s5p_mfc_raw_info raw_buf;
 	int mv_size;
@@ -946,6 +964,7 @@ struct s5p_mfc_ctx {
 	struct list_head ts_list;
 	int ts_count;
 	int ts_is_full;
+	int skype_scenario;
 };
 
 #define fh_to_mfc_ctx(x)	\
@@ -1061,7 +1080,7 @@ static inline unsigned int mfc_version(struct s5p_mfc_dev *dev)
 					(dev->fw.date >= 0x120823)))
 #define FW_HAS_VUI_PARAMS(dev)		(IS_MFCV6(dev) &&		\
 					(dev->fw.date >= 0x121214))
-#define FW_HAS_ADV_RC_MODE(dev)		(IS_MFCV6(dev) &&		\
+#define FW_HAS_ADV_RC_MODE(dev)		((IS_MFCV6(dev) && !IS_MFCv78(dev)) &&	\
 					(dev->fw.date >= 0x130329))
 #define FW_HAS_I_LIMIT_RC_MODE(dev)	((IS_MFCv7X(dev) &&		\
 					(dev->fw.date >= 0x140801)) ||	\
@@ -1079,7 +1098,9 @@ static inline unsigned int mfc_version(struct s5p_mfc_dev *dev)
 					(dev->fw.date >= 0x140926)))
 #define FW_HAS_BASE_CHANGE(dev)		((IS_MFCv7X(dev) || IS_MFCV8(dev))&&	\
 					(dev->fw.date >= 0x131108))
-#define FW_HAS_TEMPORAL_SVC_CH(dev)	((IS_MFCv8X(dev) &&			\
+#define FW_HAS_TEMPORAL_SVC_CH(dev)	((IS_MFCv78(dev) &&		\
+					(dev->fw.date >= 0x151007)) ||          \
+					(IS_MFCv8X(dev) &&			\
 					(dev->fw.date >= 0x140821)) ||		\
 					(IS_MFCv9X(dev) &&			\
 					(dev->fw.date >= 0x141008)))
@@ -1091,6 +1112,11 @@ static inline unsigned int mfc_version(struct s5p_mfc_dev *dev)
 					(dev->fw.date >= 0x141205))
 #define FW_HAS_GOP2(dev)		((IS_MFCv78(dev) || IS_MFCv9X(dev)) &&			\
 					(dev->fw.date >= 0x150316))
+
+#define FW_SUPPORT_SKYPE(dev)		((IS_MFCv78(dev) &&		\
+					(dev->fw.date >= 0x151007)) ||	\
+					(IS_MFCv9X(dev) &&		\
+					(dev->fw.date >= 0x150603)))
 
 #define HW_LOCK_CLEAR_MASK		(0xFFFFFFFF)
 
@@ -1106,15 +1132,24 @@ static inline unsigned int mfc_version(struct s5p_mfc_dev *dev)
 #define not_coded_cond(ctx)	is_mpeg4vc1(ctx)
 #define on_res_change(ctx)	((ctx)->state >= MFCINST_RES_CHANGE_INIT &&	\
 				 (ctx)->state <= MFCINST_RES_CHANGE_END)
+#define need_to_wait_frame_start(ctx)		\
+	(((ctx->state == MFCINST_FINISHING) ||	\
+	  (ctx->state == MFCINST_RUNNING)) &&	\
+	 test_bit(ctx->num, &ctx->dev->hw_lock))
+#define need_to_wait_nal_abort(ctx)		 \
+	(((ctx->state == MFCINST_ABORT_INST)) && \
+	 test_bit(ctx->num, &ctx->dev->hw_lock))
 
 /* Extra information for Decoder */
 #define	DEC_SET_DUAL_DPB		(1 << 0)
 #define	DEC_SET_DYNAMIC_DPB		(1 << 1)
 #define	DEC_SET_LAST_FRAME_INFO		(1 << 2)
+#define	DEC_SET_SKYPE_FLAG		(1 << 3)
 /* Extra information for Encoder */
 #define	ENC_SET_RGB_INPUT		(1 << 0)
 #define	ENC_SET_SPARE_SIZE		(1 << 1)
 #define	ENC_SET_TEMP_SVC_CH		(1 << 2)
+#define	ENC_SET_SKYPE_FLAG		(1 << 3)
 
 #define MFC_QOS_FLAG_NODATA		0xFFFFFFFF
 

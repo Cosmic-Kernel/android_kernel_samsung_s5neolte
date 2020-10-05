@@ -273,6 +273,8 @@ static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 #ifdef CONFIG_TIMA_RKP
 #ifdef CONFIG_KNOX_KAP
 		if (boot_mode_security)  rkp_do = 1;
+#else
+		rkp_do = 1;
 #endif
 		if( rkp_do ){
 			pmd = rkp_ro_alloc();
@@ -399,6 +401,8 @@ static void __init map_mem(void)
 #ifdef CONFIG_TIMA_RKP
 #ifdef CONFIG_KNOX_KAP
 	if (boot_mode_security)  rkp_do = 1;
+#else
+	rkp_do = 1;
 #endif
 	if( rkp_do ){
 		create_mapping(start, __phys_to_virt(start), mid - start);

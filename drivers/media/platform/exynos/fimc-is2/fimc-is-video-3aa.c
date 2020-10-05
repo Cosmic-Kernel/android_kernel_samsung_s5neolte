@@ -492,6 +492,9 @@ static int fimc_is_3aa_video_s_ctrl(struct file *file, void *priv,
 	int ret = 0;
 	struct fimc_is_video_ctx *vctx = file->private_data;
 	struct fimc_is_device_ischain *device;
+	unsigned int value = 0;
+	unsigned int captureIntent = 0;
+	unsigned int captureCount = 0;
 
 	BUG_ON(!vctx);
 	BUG_ON(!GET_DEVICE(vctx));
@@ -503,8 +506,18 @@ static int fimc_is_3aa_video_s_ctrl(struct file *file, void *priv,
 
 	switch (ctrl->id) {
 	case V4L2_CID_IS_INTENT:
-		device->group_3aa.intent_ctl.aa.captureIntent = ctrl->value;
-		minfo("[3AA:V] s_ctrl intent(%d)\n", vctx, ctrl->value);
+		value = (unsigned int)ctrl->value;
+		captureIntent = (value >> 16) & 0x0000FFFF;
+		if (captureIntent == AA_CAPTRUE_INTENT_STILL_CAPTURE_DYNAMIC_SHOT) {
+			captureCount = value & 0x0000FFFF;
+		} else {
+			captureIntent = ctrl->value;
+			captureCount = 0;
+		}
+		device->group_3aa.intent_ctl.aa.captureIntent = captureIntent;
+		device->group_3aa.intent_ctl.aa.vendor_captureCount = captureCount;
+
+		minfo("[3AA:V] s_ctrl intent(%d) count(%d)\n", vctx, captureIntent, captureCount);
 		break;
 	case V4L2_CID_IS_FORCE_DONE:
 		set_bit(FIMC_IS_GROUP_REQUEST_FSTOP, &device->group_3aa.state);

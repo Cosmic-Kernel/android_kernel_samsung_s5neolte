@@ -1,7 +1,7 @@
 /*
  * Common function shared by Linux WEXT, cfg80211 and p2p drivers
  *
- * Copyright (C) 1999-2015, Broadcom Corporation
+ * Copyright (C) 1999-2016, Broadcom Corporation
  * 
  *      Unless you and Broadcom execute a separate written software license
  * agreement governing use of this software, this software is licensed to you
@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: wldev_common.c 581455 2015-08-24 08:55:25Z $
+ * $Id: wldev_common.c 585464 2015-09-10 12:47:43Z $
  */
 
 #include <osl.h>
@@ -41,7 +41,13 @@
 
 #define	WLDEV_ERROR(args)						\
 	do {										\
-		printk(KERN_ERR "WLDEV-ERROR) %s : ", __func__);	\
+		printk(KERN_ERR "WLDEV-ERROR) ");	\
+		printk args;							\
+	} while (0)
+
+#define	WLDEV_INFO(args)						\
+	do {										\
+		printk(KERN_INFO "WLDEV-INFO) ");	\
 		printk args;							\
 	} while (0)
 
@@ -389,7 +395,7 @@ int wldev_set_country(
 			return error;
 		}
 		dhd_bus_country_set(dev, &cspec_desired, notify);
-		WLDEV_ERROR(("%s: set country for %s as %s rev %d\n",
+		WLDEV_INFO(("%s: set country for %s as %s rev %d\n",
 			__FUNCTION__, country_code, cspec_desired.ccode, cspec_desired.rev));
 	}
 	return 0;
